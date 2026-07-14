@@ -241,10 +241,30 @@
     },
   };
 
+  // ---- Cached soft radial "glow puddle" per color ----
+  // Used for entity underglow, ball danger aura, pickup glow — stamped with
+  // drawImage instead of building a fresh gradient every frame (huge win on
+  // Firefox, which is slow at per-frame createRadialGradient/shadowBlur).
+  const PUDDLE = 128;
+  const puddleCache = new Map();
+  function glowPuddle(color) {
+    if (puddleCache.has(color)) return puddleCache.get(color);
+    const cv = make(PUDDLE, PUDDLE);
+    const g = cv.getContext("2d");
+    const c = PUDDLE / 2;
+    const grad = g.createRadialGradient(c, c, 1, c, c, c);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+    puddleCache.set(color, cv);
+    return cv;
+  }
+
   window.SPR = {
     BODY, BALLPX, ICON,
-    charBody, ball, powerIcon, powerIconURL,
+    charBody, ball, powerIcon, powerIconURL, glowPuddle,
     // rebuild everything if palette changes (not used at runtime, handy for dev)
-    clear() { bodyCache.clear(); ballCache = null; iconCache.clear(); iconURL.clear(); },
+    clear() { bodyCache.clear(); ballCache = null; iconCache.clear(); iconURL.clear(); puddleCache.clear(); },
   };
 })();

@@ -73,7 +73,9 @@
       this._nextNoteTime = this.ctx.currentTime + 0.06;
       const loop = () => {
         if (!this.playing) return;
-        const ahead = 0.12;
+        // Wide lookahead so a busy main thread (frame hitches) doesn't
+        // starve the scheduler and cause music gaps / stutter.
+        const ahead = 0.28;
         while (this._nextNoteTime < this.ctx.currentTime + ahead) {
           // Ease current tempo toward the gameplay-driven target.
           this._tempo += (this._targetTempo - this._tempo) * 0.05;

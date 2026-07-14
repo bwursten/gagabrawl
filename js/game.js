@@ -51,9 +51,12 @@
   // ------------------------------------------------------------
   function resize() {
     const rect = canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    // Cap the pixel ratio and absolute size: the neon effects scale with
+    // pixel count, and Firefox in particular gets expensive at high res.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const MAX = 1100;
+    canvas.width = Math.max(1, Math.min(MAX, Math.round(rect.width * dpr)));
+    canvas.height = Math.max(1, Math.min(MAX, Math.round(rect.height * dpr)));
   }
   window.addEventListener("resize", resize);
 
