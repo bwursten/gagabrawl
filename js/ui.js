@@ -12,6 +12,7 @@
   const UI = {
     selectedChar: 0,
     selectedMode: "lives",
+    selectedDifficulty: "normal",
 
     init(handlers) {
       this.handlers = handlers;
@@ -37,9 +38,22 @@
         });
       });
 
+      // Difficulty buttons
+      document.querySelectorAll(".diff-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".diff-btn").forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+          this.selectedDifficulty = btn.dataset.diff;
+        });
+      });
+
       el("btn-start").addEventListener("click", () => handlers.onStart(this.getChoices()));
       el("btn-next").addEventListener("click", () => handlers.onNext());
       el("btn-again").addEventListener("click", () => handlers.onPlayAgain());
+
+      // Pause / resume
+      const bp = el("btn-pause"); if (bp) bp.addEventListener("click", () => handlers.onPause());
+      const br = el("btn-resume"); if (br) br.addEventListener("click", () => handlers.onResume());
 
       // Audio controls
       const mute = el("btn-mute");
@@ -86,7 +100,23 @@
     },
 
     getChoices() {
-      return { charIndex: this.selectedChar, mode: this.selectedMode };
+      return { charIndex: this.selectedChar, mode: this.selectedMode, difficulty: this.selectedDifficulty };
+    },
+
+    // ---- best score / settings display ----
+    showBest(n) {
+      const e = el("best-line");
+      if (e) e.textContent = n > 0 ? "Best: Round " + n : "";
+    },
+    setVolumeSlider(v) {
+      const e = el("vol");
+      if (e) e.value = Math.round(v * 100);
+    },
+
+    // ---- pause overlay ----
+    showPause(on) {
+      const e = el("screen-pause");
+      if (e) e.classList.toggle("hidden", !on);
     },
 
     // ---- screen switching ----
@@ -97,7 +127,13 @@
       if (which) this.show(which);
     },
 
-    setHudVisible(v) { el("hud").classList.toggle("hidden", !v); },
+    setHudVisible(v) {
+      el("hud").classList.toggle("hidden", !v);
+      // The pause button lives in the always-visible settings cluster, so show
+      // it only while a round is actually in progress.
+      const bp = el("btn-pause");
+      if (bp) bp.classList.toggle("hidden", !v);
+    },
 
     // ---- HUD ----
     updateHud(state) {

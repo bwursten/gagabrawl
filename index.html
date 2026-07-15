@@ -42,7 +42,17 @@
             </div>
           </div>
 
+          <div class="section">
+            <h2>Difficulty</h2>
+            <div class="diff-picker">
+              <button class="diff-btn" data-diff="easy">Easy</button>
+              <button class="diff-btn selected" data-diff="normal">Normal</button>
+              <button class="diff-btn" data-diff="hard">Hard</button>
+            </div>
+          </div>
+
           <button id="btn-start" class="big-btn">START GAME</button>
+          <p id="best-line" class="hint"></p>
         </div>
 
         <!-- HOW-TO-PLAY TAB: instructions + power-up legend -->
@@ -91,8 +101,18 @@
       <div id="hud-powers" class="hud-powers"></div>
     </div>
 
+    <!-- ================= PAUSE OVERLAY ================= -->
+    <div id="screen-pause" class="screen hidden">
+      <div class="panel small">
+        <h1 class="burst">PAUSED</h1>
+        <button id="btn-resume" class="big-btn">RESUME</button>
+        <p class="hint">Press P or Esc to resume</p>
+      </div>
+    </div>
+
     <!-- ================= AUDIO CONTROL ================= -->
     <div id="audio-ctrl" class="audio-ctrl">
+      <button id="btn-pause" class="pause-btn hidden" title="Pause (P)" aria-label="Pause">⏸</button>
       <button id="btn-mute" class="mute-btn" title="Mute / unmute" aria-label="Mute">🔊</button>
       <input id="vol" class="vol" type="range" min="0" max="100" value="60" aria-label="Volume" />
     </div>

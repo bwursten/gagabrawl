@@ -14,9 +14,10 @@
       this.available = [];      // power-up ids unlocked this round
     }
 
-    reset(round, oct) {
+    reset(round, oct, everyMult) {
       this.pickups.length = 0;
-      this.nextSpawn = performance.now() + C.POWERUP_FIRST_MS;
+      this.everyMult = everyMult || 1;   // difficulty: <1 = more frequent power-ups
+      this.nextSpawn = performance.now() + C.POWERUP_FIRST_MS * this.everyMult;
       // Unlock power-ups progressively as rounds advance.
       this.available = C.POWERUP_ORDER.filter((id) => C.POWERUPS[id].unlockRound <= round);
     }
@@ -35,7 +36,7 @@
       // Spawn a new one on cadence (max 2 on the field at once)
       if (now > this.nextSpawn && this.pickups.length < 2 && this.available.length) {
         this.spawn(oct);
-        this.nextSpawn = now + C.POWERUP_EVERY_MS;
+        this.nextSpawn = now + C.POWERUP_EVERY_MS * (this.everyMult || 1);
       }
     }
 
@@ -107,8 +108,9 @@
           for (const b of balls) b.bomb = true;
           break;
         case "life":
-          // Regain a life in 3-Lives mode; otherwise grant a free one-hit save.
-          if (mode === "lives" && ch.lives < C.LIVES) ch.lives++;
+          // Add a heart in 3-Lives mode (can stack above the starting count,
+          // up to MAX_LIVES); otherwise grant a free one-hit save.
+          if (mode === "lives" && ch.lives < C.MAX_LIVES) ch.lives++;
           else ch.shield = true;
           break;
         case "multi":

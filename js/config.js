@@ -68,7 +68,8 @@
     MULTIBALL_MS: 9000,      // lifespan of an extra ball from Multi-Ball
     MAX_BALLS: 3,            // safety cap on simultaneous balls
 
-    LIVES: 3,
+    LIVES: 3,           // starting lives in 3-Lives mode
+    MAX_LIVES: 5,       // Extra Life can stack hearts up to this (shows extra hearts in the HUD)
 
     // ---- Juice / visual feel ----
     BALL_TRAIL: 10,          // number of trail ghosts behind the ball
@@ -82,6 +83,17 @@
     // ---- Pre-round "Ga! Ga! Ga! Ball!" countdown ----
     COUNTDOWN_START_DELAY: 500,  // ms before the chant begins (lets players settle)
     COUNTDOWN_STEP: 580,         // ms between each chant beat
+
+    // ---- Combo / streak ----
+    COMBO_WINDOW: 2600,          // ms window to chain player knockouts into a combo
+
+    // ---- Difficulty (multipliers applied to AI speed/aggression, launch pace,
+    // and power-up frequency). Selected on the title screen. ----
+    DIFFICULTIES: {
+      easy:   { label: "Easy",   aiSpeed: 0.82, aiAggro: 0.7, launch: 0.85, powerEvery: 0.8 },
+      normal: { label: "Normal", aiSpeed: 1.0,  aiAggro: 1.0, launch: 1.0,  powerEvery: 1.0 },
+      hard:   { label: "Hard",   aiSpeed: 1.18, aiAggro: 1.3, launch: 1.18, powerEvery: 1.15 },
+    },
 
     // ---- Neon-arcade theme ----
     // Each round cycles to the next accent so advancing visibly reskins the arena.

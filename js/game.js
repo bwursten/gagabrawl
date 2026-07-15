@@ -46,7 +46,12 @@
     ballLive: false,   // is the ball in play? (false during the pre-round countdown)
     cdSteps: [],       // "Ga! Ga! Ga! Ball!" countdown timeline
     cdIndex: 0,
+    difficulty: "normal",
+    diff: null,        // resolved CONFIG.DIFFICULTIES entry
+    paused: false,
+    combo: { count: 0, time: 0 },  // player knockout streak
   };
+  state.diff = C.DIFFICULTIES[state.difficulty];
 
   state.oct = GEO.buildOctagon();
 
@@ -144,8 +149,8 @@
   function aiCountForRound(r) {
     return Math.min(C.MAX_AI, C.START_AI + Math.floor((r - 1) / C.AI_ADD_EVERY));
   }
-  function aiSpeedForRound(r) { return C.AI_SPEED_BASE + (r - 1) * C.AI_SPEED_PER_ROUND; }
-  function aiAggroForRound(r) { return Math.min(0.8, C.AI_AGGRO_BASE + (r - 1) * C.AI_AGGRO_PER_ROUND); }
+  function aiSpeedForRound(r) { return (C.AI_SPEED_BASE + (r - 1) * C.AI_SPEED_PER_ROUND) * state.diff.aiSpeed; }
+  function aiAggroForRound(r) { return Math.min(0.85, (C.AI_AGGRO_BASE + (r - 1) * C.AI_AGGRO_PER_ROUND) * state.diff.aiAggro); }
 
   function pickAIColors(n, excludeIndex) {
     const pool = C.CHARACTERS.map((c, i) => ({ c, i })).filter((o) => o.i !== excludeIndex);
@@ -170,6 +175,8 @@
   function startMatch(choices) {
     state.playerChoice = choices.charIndex;
     state.mode = choices.mode;
+    state.difficulty = choices.difficulty || "normal";
+    state.diff = C.DIFFICULTIES[state.difficulty] || C.DIFFICULTIES.normal;
     state.round = 1;
     startRound(1, true);
   }
@@ -214,9 +221,10 @@
     state.balls = [ball];
     state.ballLive = false;
 
-    state.powerups.reset(round, state.oct);
+    state.powerups.reset(round, state.oct, state.diff.powerEvery);
     state.roundStart = performance.now();
     state.aggro = aiAggroForRound(round);
+    state.combo.count = 0; state.combo.time = 0;
 
     // "Ga! Ga! Ga! Ball!" chant — players can move to position during it.
     const t0 = performance.now() + C.COUNTDOWN_START_DELAY;
@@ -297,7 +305,7 @@
     const elapsed = (performance.now() - state.roundStart) / 1000;
     return Math.min(
       C.BALL_MAX_SPEED,
-      C.HIT_LAUNCH + (state.round - 1) * C.LAUNCH_PER_ROUND + elapsed * C.LAUNCH_RAMP_PER_SEC
+      (C.HIT_LAUNCH + (state.round - 1) * C.LAUNCH_PER_ROUND + elapsed * C.LAUNCH_RAMP_PER_SEC) * state.diff.launch
     );
   }
 
@@ -308,12 +316,14 @@
   // area knockout; otherwise it's a normal single hit.
   function applyDamage(target, ball) {
     if (!target.alive) return;
-    if (ball && ball.bomb) { detonateBomb(ball); return; }
-    hitChar(target);
+    const attacker = ball ? ball.lastHitter : null;
+    if (ball && ball.bomb) { detonateBomb(ball, attacker); return; }
+    hitChar(target, attacker);
   }
 
   // Resolve a single hit on one character (shield / lives / elimination).
-  function hitChar(target) {
+  // `attacker` is the character whose shot caused it (for combo credit).
+  function hitChar(target, attacker) {
     if (!target.alive) return;
     const now = performance.now();
 
@@ -333,16 +343,16 @@
 
     if (state.mode === "lives") {
       target.lives--;
-      if (target.lives <= 0) { eliminate(target); return; }
+      if (target.lives <= 0) { eliminate(target, attacker); return; }
       state.shake = C.SHAKE_HIT;
       state.hitStop = Math.max(state.hitStop, C.HITSTOP_HIT);
     } else {
-      eliminate(target);
+      eliminate(target, attacker);
     }
   }
 
   // Bomb Ball: knock out everyone within the blast radius, then disarm all balls.
-  function detonateBomb(ball) {
+  function detonateBomb(ball, attacker) {
     state.fx.poof(ball.x, ball.y, "#ff7722");
     state.fx.shockwave(ball.x, ball.y, "#ff5522", true);
     state.fx.shockwave(ball.x, ball.y, "#ffd15a", true);
@@ -350,12 +360,12 @@
     state.hitStop = Math.max(state.hitStop, C.HITSTOP_ELIM);
     AUDIO.eliminate();
     for (const ch of state.chars) {
-      if (ch.alive && GEO.dist(ball.x, ball.y, ch.x, ch.y) < C.BOMB_RADIUS) hitChar(ch);
+      if (ch.alive && GEO.dist(ball.x, ball.y, ch.x, ch.y) < C.BOMB_RADIUS) hitChar(ch, attacker);
     }
     for (const b of state.balls) b.bomb = false;
   }
 
-  function eliminate(ch) {
+  function eliminate(ch, attacker) {
     ch.alive = false;
     state.fx.poof(ch.x, ch.y, ch.color.fill);
     state.fx.shockwave(ch.x, ch.y, ch.color.fill, true);
@@ -364,6 +374,19 @@
     AUDIO.eliminate();
     AUDIO.duck();
     if (ch.isPlayer) UI.toast("OUT!", 1000);
+    else if (attacker === state.player) creditCombo();
+  }
+
+  // Player knocked out a rival — chain it into a combo if quick enough.
+  function creditCombo() {
+    const now = performance.now();
+    if (now - state.combo.time < C.COMBO_WINDOW) state.combo.count++;
+    else state.combo.count = 1;
+    state.combo.time = now;
+    if (state.combo.count >= 2) {
+      UI.toast(state.combo.count + "x COMBO!", 1000, "power");
+      AUDIO.combo(state.combo.count);
+    }
   }
 
   function checkEnd() {
@@ -373,7 +396,7 @@
     if (!playerAlive) {
       // Run over.
       state.phase = "over";
-      state.best = Math.max(state.best, state.round);
+      recordBest();
       AUDIO.stopMusic();
       UI.setHudVisible(false);
       setTimeout(() => {
@@ -385,7 +408,7 @@
     if (alive.length <= 1) {
       // Player is last standing -> round clear.
       state.phase = "roundclear";
-      state.best = Math.max(state.best, state.round);
+      recordBest();
       const nextRound = state.round + 1;
       const newPowers = state.powerups.newlyUnlockedAt(nextRound);
       AUDIO.stopMusic();
@@ -413,10 +436,15 @@
     }
 
     // Move the player: relative drag (touch) or mouse follow (desktop).
+    // A frozen player can't move (Freeze Ray now affects the human too).
     if (player.alive) {
-      if (state.control === "drag") {
+      if (player.frozen) {
+        state.dragDX = 0; state.dragDY = 0;
+      } else if (state.control === "drag") {
         // Apply drag accumulated since last frame, capped to avoid teleporting.
-        let ddx = state.dragDX, ddy = state.dragDY;
+        // Speed Boost amplifies drag movement so the power-up works on touch too.
+        const boost = player.boosted ? C.SPEED_MULT : 1;
+        let ddx = state.dragDX * boost, ddy = state.dragDY * boost;
         const dl = Math.hypot(ddx, ddy);
         const cap = 300;
         if (dl > cap) { ddx = ddx / dl * cap; ddy = ddy / dl * cap; }
@@ -528,23 +556,86 @@
   // ------------------------------------------------------------
   // Main loop
   // ------------------------------------------------------------
-  function frame() {
-    // Shake always decays in real time, even during a hit-stop freeze.
+  // One fixed simulation step (~60 Hz), independent of display refresh rate.
+  function tick() {
     state.shake *= C.SHAKE_DECAY;
     if (state.shake < 0.15) state.shake = 0;
 
     if (state.hitStop > 0) {
-      // Frozen frame for impact punch — keep drawing but skip logic.
-      state.hitStop--;
+      state.hitStop--;            // frozen frame for impact punch
     } else if (state.phase === "playing") {
       updatePlaying();
     } else {
       updateDemo();
     }
+  }
+
+  // Fixed-timestep loop: accumulate real elapsed time and run the sim at a
+  // constant rate, so speed is identical on 60/120/144 Hz screens and the
+  // game doesn't run fast/slow on different hardware. Render once per frame.
+  const SIM_STEP = 1000 / 60;
+  let _lastT = 0, _acc = 0;
+  function frame(now) {
+    if (!now) now = performance.now();
+    if (!_lastT) _lastT = now;
+    let dt = now - _lastT;
+    _lastT = now;
+
+    if (state.paused) {
+      _acc = 0;                   // don't bank time while paused
+      RENDER.draw(ctx, state);
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    if (dt > 250) dt = 250;       // clamp big gaps (tab switch) to avoid a spiral
+    _acc += dt;
+    let steps = 0;
+    while (_acc >= SIM_STEP && steps < 5) { tick(); _acc -= SIM_STEP; steps++; }
 
     RENDER.draw(ctx, state);
     requestAnimationFrame(frame);
   }
+
+  // ------------------------------------------------------------
+  // Persistence (localStorage) — best round + audio settings.
+  // Guarded so it can't break in private mode / sandboxed iframes.
+  // ------------------------------------------------------------
+  const STORE_KEY = "gbb.v1";
+  function loadStore() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveStore(patch) {
+    try {
+      const cur = loadStore();
+      localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign(cur, patch)));
+    } catch (e) { /* ignore */ }
+  }
+  function recordBest() {
+    if (state.round > state.best) { state.best = state.round; saveStore({ best: state.best }); }
+  }
+
+  // ------------------------------------------------------------
+  // Pause / resume
+  // ------------------------------------------------------------
+  function doPause() {
+    if (state.phase !== "playing" || state.paused) return;
+    state.paused = true;
+    AUDIO.pauseAll();
+    UI.showPause(true);
+  }
+  function doResume() {
+    if (!state.paused) return;
+    state.paused = false;
+    AUDIO.resumeAll();
+    UI.showPause(false);
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+      if (state.phase === "playing") { state.paused ? doResume() : doPause(); }
+    }
+  });
 
   // ------------------------------------------------------------
   // UI wiring
@@ -553,6 +644,11 @@
     onStart(choices) {
       AUDIO.init();
       AUDIO.resume();
+      // Apply saved audio prefs now that the AudioContext exists.
+      const s = state._savedAudio || {};
+      if (typeof s.vol === "number") AUDIO.setVolume(s.vol);
+      if (s.muted) AUDIO.setMuted(true);
+      UI.setMuteIcon(AUDIO.muted);
       // Music now starts when the ball drops in (serveBall), so the
       // "Ga! Ga! Ga! Ball!" chant plays clean.
       startMatch(choices);
@@ -561,23 +657,38 @@
     onPlayAgain() {
       // Return to start screen so the player can re-pick.
       state.phase = "start";
+      state.paused = false;
+      UI.showPause(false);
       UI.setHudVisible(false);
       UI.showScreen("screen-start");
       setupDemo();
     },
+    onPause() { doPause(); },
+    onResume() { doResume(); },
     onToggleMute() {
       AUDIO.setMuted(!AUDIO.muted);
       UI.setMuteIcon(AUDIO.muted);
+      saveStore({ muted: AUDIO.muted });
     },
     onVolume(v) {
       AUDIO.setVolume(v);
       if (AUDIO.muted && v > 0) { AUDIO.setMuted(false); UI.setMuteIcon(false); }
+      saveStore({ vol: v, muted: AUDIO.muted });
     },
   });
 
   // ------------------------------------------------------------
   // Boot
   // ------------------------------------------------------------
+  const saved = loadStore();
+  state.best = saved.best || 0;
+  UI.showBest(state.best);
+  // Apply saved audio prefs to the volume slider / mute (applied to the
+  // AudioContext once it's created on first Start).
+  if (typeof saved.vol === "number") UI.setVolumeSlider(saved.vol);
+  if (saved.muted) UI.setMuteIcon(true);
+  state._savedAudio = saved;   // consumed in onStart via AUDIO after init
+
   resize();
   setupDemo();
   UI.showScreen("screen-start");

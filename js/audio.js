@@ -100,6 +100,29 @@
       this._targetTempo = this._baseTempo + (this._maxTempo - this._baseTempo) * x;
     }
 
+    // Freeze / unfreeze all audio for pause (suspends the whole context).
+    pauseAll() { if (this.ctx && this.ctx.state === "running") this.ctx.suspend(); }
+    resumeAll() { if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); }
+
+    // Rising chime for a combo; pitch climbs with the streak count.
+    combo(n) {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const base = 523 * Math.pow(2, Math.min(n - 2, 8) / 12); // step up a semitone per combo
+      [0, 4, 7].forEach((semi, i) => {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = "square";
+        const tt = t + i * 0.05;
+        o.frequency.value = base * Math.pow(2, semi / 12);
+        g.gain.setValueAtTime(0.0001, tt);
+        g.gain.exponentialRampToValueAtTime(0.28, tt + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.16);
+        o.connect(g); g.connect(this.sfxGain);
+        o.start(tt); o.stop(tt + 0.18);
+      });
+    }
+
     // Briefly dip the music for impact punch (used on eliminations).
     duck() {
       if (!this.ctx || !this.musicGain) return;
