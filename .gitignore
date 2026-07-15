@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Windows
+Thumbs.db
+
+# Editor / OS clutter
+*.swp
+*~
+.vscode/
+.idea/
