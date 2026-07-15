@@ -23,12 +23,15 @@
     // ---- Ball ----
     BALL_RADIUS: 26,
     BALL_BASE_SPEED: 5.2,    // speed a fresh round starts at (floaty / moderate)
-    BALL_MIN_SPEED: 2.2,     // resting drift; below this the ball is "safe" to bat
+    BALL_MIN_SPEED: 2.2,     // resting drift; the ball always coasts down toward this (safe, below HIT_SPEED)
     BALL_MAX_SPEED: 16,
-    BALL_FRICTION: 0.995,    // gentle so it stays floaty
-    BALL_RAMP_PER_SEC: 0.10, // how much max drift speed climbs each second of the round
+    BALL_FRICTION: 0.992,    // ball loses energy between hits so it visibly coasts down if not struck
     HIT_SPEED: 6.4,          // ball must be at/above this speed to DAMAGE a character
-    HIT_LAUNCH: 9.5,         // speed imparted when a character bats the ball
+    HIT_LAUNCH: 9.5,         // base speed imparted when a character bats the ball
+    // Round progression: bat launches get faster over time (this is what makes
+    // the round speed up — NOT a rising floor), so a neglected ball still slows.
+    LAUNCH_PER_ROUND: 0.8,   // added to base launch each round
+    LAUNCH_RAMP_PER_SEC: 0.14, // added to launch per second elapsed in the round
     HIT_GRACE_MS: 260,       // the batter is immune to their own shot briefly
     BALL_GIANT_SCALE: 2.1,
 

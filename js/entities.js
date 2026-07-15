@@ -102,7 +102,7 @@
   //   [{ target: Character }]
   // roundSpeedCap gradually rises over the round for the speed ramp.
   // ---------------------------------------------------------
-  function stepBall(ball, chars, oct, speedFloor, magnetHolders, fx, audio) {
+  function stepBall(ball, chars, oct, speedFloor, launchBase, magnetHolders, fx, audio) {
     const now = performance.now();
 
     // Magnet Hands: bend the ball toward the nearest magnet holder in range.
@@ -187,8 +187,9 @@
         const ref = GEO.reflect(ball.vx, ball.vy, nx, ny, 1.0);
         ball.vx = ref.vx; ball.vy = ref.vy;
 
-        // The character bats it — launch it away from them.
-        let launch = Math.max(C.HIT_LAUNCH, incomingSpeed * 0.85);
+        // The character bats it — launch it away from them at the current
+        // round's launch speed (grows over the round; ball coasts down between hits).
+        let launch = Math.max(launchBase, incomingSpeed * 0.9);
         // Super Smash: this character's next bat fires at max speed.
         if (ch.smashReady) {
           launch = C.BALL_MAX_SPEED;

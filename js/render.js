@@ -194,6 +194,25 @@
     ctx.restore();
 
     ctx.drawImage(A.vignette, 0, 0);
+
+    // Floating touch joystick overlay (screen space, above everything).
+    if (state.joystick && state.joystick.active) drawJoystick(ctx, state.joystick);
+  }
+
+  function drawJoystick(ctx, j) {
+    ctx.save();
+    ctx.lineWidth = Math.max(2, j.radius * 0.06);
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = "#22e6ff";
+    ctx.beginPath(); ctx.arc(j.ox, j.oy, j.radius, 0, Math.PI * 2); ctx.stroke();
+    // knob
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#22e6ff";
+    ctx.beginPath(); ctx.arc(j.kx, j.ky, j.radius * 0.42, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "#eaf6ff";
+    ctx.beginPath(); ctx.arc(j.kx, j.ky, j.radius * 0.42, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
   }
 
   function drawMotes(ctx, W, H, theme) {

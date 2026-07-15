@@ -35,6 +35,9 @@
     best: 0,
     playerChoice: 0,
     pointer: { x: C.WORLD / 2, y: C.WORLD / 2, active: false },
+    control: "pointer",   // "pointer" (mouse) | "joystick" (touch)
+    // Floating joystick (touch): coords are in canvas pixels for drawing.
+    joystick: { active: false, ox: 0, oy: 0, kx: 0, ky: 0, dirX: 0, dirY: 0, mag: 0, radius: 60 },
     toScreen: null,
     scale: 1,
     shake: 0,          // screen-shake magnitude (world units), decays each frame
@@ -80,24 +83,69 @@
     return { x, y };
   }
 
-  // On touch, lift the target above the fingertip so the thumb doesn't cover
-  // the player's character.
-  const TOUCH_OFFSET = 74; // world units
-
-  function onMove(clientX, clientY, isTouch) {
+  // ---- Desktop: mouse position drives a follow target ----
+  function onMove(clientX, clientY) {
     const w = pointerToWorld(clientX, clientY);
     state.pointer.x = w.x;
-    state.pointer.y = w.y - (isTouch ? TOUCH_OFFSET : 0);
+    state.pointer.y = w.y;
     state.pointer.active = true;
+    state.control = "pointer";
+  }
+  canvas.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY));
+
+  // ---- Touch: floating joystick that keeps the hand off the play field ----
+  function clientToCanvas(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height),
+    };
   }
 
-  canvas.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY, false));
-  canvas.addEventListener("touchmove", (e) => {
-    if (e.touches[0]) { onMove(e.touches[0].clientX, e.touches[0].clientY, true); e.preventDefault(); }
-  }, { passive: false });
+  function joyStart(clientX, clientY) {
+    const p = clientToCanvas(clientX, clientY);
+    const j = state.joystick;
+    j.active = true;
+    j.ox = j.kx = p.x;
+    j.oy = j.ky = p.y;
+    j.dirX = j.dirY = 0;
+    j.mag = 0;
+    j.radius = Math.min(canvas.width, canvas.height) * 0.11;
+    state.control = "joystick";
+  }
+
+  function joyMove(clientX, clientY) {
+    const j = state.joystick;
+    if (!j.active) return;
+    const p = clientToCanvas(clientX, clientY);
+    const dx = p.x - j.ox, dy = p.y - j.oy;
+    const len = Math.hypot(dx, dy) || 0.0001;
+    const clamped = Math.min(len, j.radius);
+    j.kx = j.ox + (dx / len) * clamped;
+    j.ky = j.oy + (dy / len) * clamped;
+    j.mag = clamped / j.radius;
+    // World direction: undo the vertical tilt squash so up/down feel natural.
+    const wdx = dx, wdy = dy / C.TILT;
+    const wl = Math.hypot(wdx, wdy) || 1;
+    j.dirX = wdx / wl;
+    j.dirY = wdy / wl;
+  }
+
+  function joyEnd() {
+    const j = state.joystick;
+    j.active = false;
+    j.mag = 0;
+    j.dirX = j.dirY = 0;
+  }
+
   canvas.addEventListener("touchstart", (e) => {
-    if (e.touches[0]) { onMove(e.touches[0].clientX, e.touches[0].clientY, true); }
+    if (e.touches[0]) { joyStart(e.touches[0].clientX, e.touches[0].clientY); }
   }, { passive: true });
+  canvas.addEventListener("touchmove", (e) => {
+    if (e.touches[0]) { joyMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+  }, { passive: false });
+  canvas.addEventListener("touchend", joyEnd, { passive: true });
+  canvas.addEventListener("touchcancel", joyEnd, { passive: true });
 
   // ------------------------------------------------------------
   // Round / match setup
@@ -245,12 +293,20 @@
     }
   }
 
-  // Current ball speed floor (ramps up through the round).
+  // The ball always coasts down toward this low, safe drift speed (well below
+  // HIT_SPEED) if it isn't struck — a neglected ball becomes slow and harmless.
   function speedFloor() {
+    return C.BALL_MIN_SPEED;
+  }
+
+  // Bat launch speed for the current round: grows with round number and with
+  // time elapsed in the round. This is what makes the pace climb over the
+  // round, while the ball still decelerates between hits.
+  function launchBase() {
     const elapsed = (performance.now() - state.roundStart) / 1000;
     return Math.min(
-      C.BALL_MAX_SPEED * 0.75,
-      C.BALL_MIN_SPEED + (state.round - 1) * 0.5 + elapsed * 0.12
+      C.BALL_MAX_SPEED,
+      C.HIT_LAUNCH + (state.round - 1) * C.LAUNCH_PER_ROUND + elapsed * C.LAUNCH_RAMP_PER_SEC
     );
   }
 
@@ -365,14 +421,20 @@
       }
     }
 
-    // Move player toward pointer (smooth follow), clamped inside pit.
+    // Move the player: joystick (touch, velocity-based) or mouse follow.
     if (player.alive) {
-      const dx = state.pointer.x - player.x;
-      const dy = state.pointer.y - player.y;
-      const d = Math.hypot(dx, dy);
-      const maxStep = player.speed();
-      const step = Math.min(d, maxStep);
-      if (d > 0.01) { player.x += (dx / d) * step; player.y += (dy / d) * step; }
+      const j = state.joystick;
+      if (state.control === "joystick" && j.active && j.mag > 0.05) {
+        const spd = player.speed() * j.mag;
+        player.x += j.dirX * spd;
+        player.y += j.dirY * spd;
+      } else if (state.control === "pointer") {
+        const dx = state.pointer.x - player.x;
+        const dy = state.pointer.y - player.y;
+        const d = Math.hypot(dx, dy);
+        const step = Math.min(d, player.speed());
+        if (d > 0.01) { player.x += (dx / d) * step; player.y += (dy / d) * step; }
+      }
       const c = GEO.clampCircleInside(state.oct, player.x, player.y, player.r);
       player.x = c.x; player.y = c.y;
     }
@@ -389,10 +451,11 @@
     if (state.ballLive) {
       const magnetHolders = state.chars.filter((c) => c.alive && c.magnet);
       const floor = speedFloor();
+      const lb = launchBase();
       for (const b of state.balls) {
         // Ball size (giant power-up)
         b.r = b.giant ? b.baseR * C.BALL_GIANT_SCALE : b.baseR;
-        const events = ENT.stepBall(b, state.chars, state.oct, floor, magnetHolders, state.fx, AUDIO);
+        const events = ENT.stepBall(b, state.chars, state.oct, floor, lb, magnetHolders, state.fx, AUDIO);
         for (const ev of events) applyDamage(ev.target, b);
       }
       manageBalls();
@@ -461,7 +524,7 @@
     ENT.separateChars(state.chars);
     for (const b of state.balls) {
       b.r = b.baseR;
-      ENT.stepBall(b, state.chars, state.oct, 3.2, [], state.fx, null);
+      ENT.stepBall(b, state.chars, state.oct, C.BALL_MIN_SPEED, C.HIT_LAUNCH, [], state.fx, null);
     }
     trackMotion(true);
     state.fx.update();
