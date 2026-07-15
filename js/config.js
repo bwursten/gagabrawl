@@ -19,6 +19,7 @@
     PLAYER_SPEED: 8.2,       // how fast the player lerps toward the cursor
     PLAYER_FOLLOW: 0.18,     // easing factor toward pointer
     HOP_HEIGHT: 6,           // idle bob amount
+    DRAG_SENS: 1.8,          // touch relative-drag amplification (finger travel -> brawler travel)
 
     // ---- Ball ----
     BALL_RADIUS: 26,

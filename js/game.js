@@ -35,9 +35,10 @@
     best: 0,
     playerChoice: 0,
     pointer: { x: C.WORLD / 2, y: C.WORLD / 2, active: false },
-    control: "pointer",   // "pointer" (mouse) | "joystick" (touch)
-    // Floating joystick (touch): coords are in canvas pixels for drawing.
-    joystick: { active: false, ox: 0, oy: 0, kx: 0, ky: 0, dirX: 0, dirY: 0, mag: 0, radius: 60 },
+    control: "pointer",   // "pointer" (mouse) | "drag" (touch)
+    // Touch relative-drag: brawler moves in the direction the finger slides.
+    touch: { active: false, x: 0, y: 0 },  // current finger pos (canvas px) for feedback
+    dragDX: 0, dragDY: 0,                  // world-space drag accumulated since last frame
     toScreen: null,
     scale: 1,
     shake: 0,          // screen-shake magnitude (world units), decays each frame
@@ -93,7 +94,8 @@
   }
   canvas.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY));
 
-  // ---- Touch: floating joystick that keeps the hand off the play field ----
+  // ---- Touch: relative drag — the brawler moves in the direction the finger
+  // slides (from anywhere on screen, including outside the court), amplified. ----
   function clientToCanvas(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -102,50 +104,39 @@
     };
   }
 
-  function joyStart(clientX, clientY) {
+  let lastTX = 0, lastTY = 0;
+
+  function dragStart(clientX, clientY) {
     const p = clientToCanvas(clientX, clientY);
-    const j = state.joystick;
-    j.active = true;
-    j.ox = j.kx = p.x;
-    j.oy = j.ky = p.y;
-    j.dirX = j.dirY = 0;
-    j.mag = 0;
-    j.radius = Math.min(canvas.width, canvas.height) * 0.11;
-    state.control = "joystick";
+    lastTX = p.x; lastTY = p.y;
+    state.touch.active = true;
+    state.touch.x = p.x; state.touch.y = p.y;
+    state.control = "drag";
   }
 
-  function joyMove(clientX, clientY) {
-    const j = state.joystick;
-    if (!j.active) return;
+  function dragMove(clientX, clientY) {
+    if (!state.touch.active) return;
     const p = clientToCanvas(clientX, clientY);
-    const dx = p.x - j.ox, dy = p.y - j.oy;
-    const len = Math.hypot(dx, dy) || 0.0001;
-    const clamped = Math.min(len, j.radius);
-    j.kx = j.ox + (dx / len) * clamped;
-    j.ky = j.oy + (dy / len) * clamped;
-    j.mag = clamped / j.radius;
-    // World direction: undo the vertical tilt squash so up/down feel natural.
-    const wdx = dx, wdy = dy / C.TILT;
-    const wl = Math.hypot(wdx, wdy) || 1;
-    j.dirX = wdx / wl;
-    j.dirY = wdy / wl;
+    const scale = Math.min(canvas.width / C.WORLD, canvas.height / (C.WORLD * C.TILT));
+    // Screen delta -> world delta (undo tilt on Y), amplified.
+    state.dragDX += ((p.x - lastTX) / scale) * C.DRAG_SENS;
+    state.dragDY += ((p.y - lastTY) / (scale * C.TILT)) * C.DRAG_SENS;
+    lastTX = p.x; lastTY = p.y;
+    state.touch.x = p.x; state.touch.y = p.y;
   }
 
-  function joyEnd() {
-    const j = state.joystick;
-    j.active = false;
-    j.mag = 0;
-    j.dirX = j.dirY = 0;
+  function dragEnd() {
+    state.touch.active = false;
   }
 
   canvas.addEventListener("touchstart", (e) => {
-    if (e.touches[0]) { joyStart(e.touches[0].clientX, e.touches[0].clientY); }
+    if (e.touches[0]) { dragStart(e.touches[0].clientX, e.touches[0].clientY); }
   }, { passive: true });
   canvas.addEventListener("touchmove", (e) => {
-    if (e.touches[0]) { joyMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+    if (e.touches[0]) { dragMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
   }, { passive: false });
-  canvas.addEventListener("touchend", joyEnd, { passive: true });
-  canvas.addEventListener("touchcancel", joyEnd, { passive: true });
+  canvas.addEventListener("touchend", dragEnd, { passive: true });
+  canvas.addEventListener("touchcancel", dragEnd, { passive: true });
 
   // ------------------------------------------------------------
   // Round / match setup
@@ -421,13 +412,17 @@
       }
     }
 
-    // Move the player: joystick (touch, velocity-based) or mouse follow.
+    // Move the player: relative drag (touch) or mouse follow (desktop).
     if (player.alive) {
-      const j = state.joystick;
-      if (state.control === "joystick" && j.active && j.mag > 0.05) {
-        const spd = player.speed() * j.mag;
-        player.x += j.dirX * spd;
-        player.y += j.dirY * spd;
+      if (state.control === "drag") {
+        // Apply drag accumulated since last frame, capped to avoid teleporting.
+        let ddx = state.dragDX, ddy = state.dragDY;
+        const dl = Math.hypot(ddx, ddy);
+        const cap = 300;
+        if (dl > cap) { ddx = ddx / dl * cap; ddy = ddy / dl * cap; }
+        player.x += ddx;
+        player.y += ddy;
+        state.dragDX = 0; state.dragDY = 0;
       } else if (state.control === "pointer") {
         const dx = state.pointer.x - player.x;
         const dy = state.pointer.y - player.y;
