@@ -53,10 +53,14 @@
     const rect = canvas.getBoundingClientRect();
     // Cap the pixel ratio and absolute size: the neon effects scale with
     // pixel count, and Firefox in particular gets expensive at high res.
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    // Scale both dimensions by the same factor so the canvas aspect matches
+    // its CSS box (no stretching on non-square/mobile layouts).
+    let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const MAX = 1100;
-    canvas.width = Math.max(1, Math.min(MAX, Math.round(rect.width * dpr)));
-    canvas.height = Math.max(1, Math.min(MAX, Math.round(rect.height * dpr)));
+    const maxSide = Math.max(rect.width, rect.height) * dpr;
+    if (maxSide > MAX) dpr *= MAX / maxSide;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
   }
   window.addEventListener("resize", resize);
 
@@ -66,28 +70,33 @@
   // ------------------------------------------------------------
   function pointerToWorld(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / C.WORLD;
-    const px = ((clientX - rect.left) * (canvas.width / rect.width)) / scale;
-    const pyScreen = ((clientY - rect.top) * (canvas.height / rect.height)) / scale;
-    const half = C.WORLD / 2;
-    // invert: screenY = half + (y-half)*TILT  ->  y = half + (screenY-half)/TILT
-    const py = half + (pyScreen - half) / C.TILT;
-    return { x: px, y: py };
+    const W = canvas.width, H = canvas.height, half = C.WORLD / 2;
+    // Inverse of render's fit-and-center transform.
+    const scale = Math.min(W / C.WORLD, H / (C.WORLD * C.TILT));
+    const cxp = (clientX - rect.left) * (W / rect.width);
+    const cyp = (clientY - rect.top) * (H / rect.height);
+    const x = half + (cxp - W / 2) / scale;
+    const y = half + (cyp - H / 2) / (C.TILT * scale);
+    return { x, y };
   }
 
-  function onMove(clientX, clientY) {
+  // On touch, lift the target above the fingertip so the thumb doesn't cover
+  // the player's character.
+  const TOUCH_OFFSET = 74; // world units
+
+  function onMove(clientX, clientY, isTouch) {
     const w = pointerToWorld(clientX, clientY);
     state.pointer.x = w.x;
-    state.pointer.y = w.y;
+    state.pointer.y = w.y - (isTouch ? TOUCH_OFFSET : 0);
     state.pointer.active = true;
   }
 
-  canvas.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY));
+  canvas.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY, false));
   canvas.addEventListener("touchmove", (e) => {
-    if (e.touches[0]) { onMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+    if (e.touches[0]) { onMove(e.touches[0].clientX, e.touches[0].clientY, true); e.preventDefault(); }
   }, { passive: false });
   canvas.addEventListener("touchstart", (e) => {
-    if (e.touches[0]) { onMove(e.touches[0].clientX, e.touches[0].clientY); }
+    if (e.touches[0]) { onMove(e.touches[0].clientX, e.touches[0].clientY, true); }
   }, { passive: true });
 
   // ------------------------------------------------------------

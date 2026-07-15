@@ -16,10 +16,16 @@
   const C = window.CONFIG;
   const SPR = window.SPR;
 
-  function makeToScreen(scale) {
+  // Fit-and-center the world into a canvas of any aspect ratio: the pit is
+  // centered and scaled to fit both dimensions (letterboxing with arena
+  // background). Works for square (desktop) and tall (mobile) canvases alike.
+  function fitScale(W, H) {
+    return Math.min(W / C.WORLD, H / (C.WORLD * C.TILT));
+  }
+  function makeToScreen(scale, W, H) {
     const half = C.WORLD / 2;
     return function (x, y) {
-      return { x: x * scale, y: (half + (y - half) * C.TILT) * scale };
+      return { x: W / 2 + (x - half) * scale, y: H / 2 + (y - half) * C.TILT * scale };
     };
   }
 
@@ -64,7 +70,7 @@
   function buildArenaBase(w, h, scale, theme, oct) {
     const cv = newCanvas(w, h);
     const ctx = cv.getContext("2d");
-    const toScreen = makeToScreen(scale);
+    const toScreen = makeToScreen(scale, w, h);
     const c = toScreen(oct.cx, oct.cy);
 
     // Background gradient + corner glow blobs
@@ -142,8 +148,8 @@
   function draw(ctx, state) {
     const canvas = ctx.canvas;
     const W = canvas.width, H = canvas.height;
-    const scale = W / C.WORLD;
-    const toScreen = makeToScreen(scale);
+    const scale = fitScale(W, H);
+    const toScreen = makeToScreen(scale, W, H);
     state.toScreen = toScreen;
     state.scale = scale;
     const theme = themeForRound(state.round);

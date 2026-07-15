@@ -18,6 +18,16 @@
       this.buildCharPicker();
       this.buildLegend();
 
+      // Title-screen tabs: Play (options) / How to Play (instructions).
+      document.querySelectorAll(".tab").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const t = btn.dataset.tab;
+          document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("selected", b === btn));
+          el("tab-play").classList.toggle("hidden", t !== "play");
+          el("tab-help").classList.toggle("hidden", t !== "help");
+        });
+      });
+
       // Mode buttons
       document.querySelectorAll(".mode-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
