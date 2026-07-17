@@ -39,6 +39,7 @@
     // Touch relative-drag: brawler moves in the direction the finger slides.
     touch: { active: false, x: 0, y: 0 },  // current finger pos (canvas px) for feedback
     dragDX: 0, dragDY: 0,                  // world-space drag accumulated since last frame
+    dragVX: 0, dragVY: 0,                  // smoothed touch velocity (for natural accel/glide)
     toScreen: null,
     scale: 1,
     shake: 0,          // screen-shake magnitude (world units), decays each frame
@@ -440,11 +441,18 @@
     if (player.alive) {
       if (player.frozen) {
         state.dragDX = 0; state.dragDY = 0;
+        state.dragVX = 0; state.dragVY = 0;
       } else if (state.control === "drag") {
-        // Apply drag accumulated since last frame, capped to avoid teleporting.
+        // Target movement from drag accumulated since last frame.
         // Speed Boost amplifies drag movement so the power-up works on touch too.
         const boost = player.boosted ? C.SPEED_MULT : 1;
-        let ddx = state.dragDX * boost, ddy = state.dragDY * boost;
+        let tdx = state.dragDX * boost, tdy = state.dragDY * boost;
+        // Ease the applied velocity toward the target so motion accelerates and
+        // glides to a stop naturally instead of snapping the full delta each frame.
+        state.dragVX += (tdx - state.dragVX) * C.DRAG_SMOOTH;
+        state.dragVY += (tdy - state.dragVY) * C.DRAG_SMOOTH;
+        // Cap per-frame travel to avoid teleporting on a fast flick.
+        let ddx = state.dragVX, ddy = state.dragVY;
         const dl = Math.hypot(ddx, ddy);
         const cap = 300;
         if (dl > cap) { ddx = ddx / dl * cap; ddy = ddy / dl * cap; }
