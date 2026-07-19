@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Scout Life's GaGa Brawl</title>
+<link rel="stylesheet" href="css/styles.ebcb2be2.css" />
+</head>
+<body>
+  <!-- Everything lives in a fixed-aspect stage so the game embeds cleanly in an iframe. -->
+  <div id="stage">
+    <canvas id="game"></canvas>
+
+    <!-- ================= START SCREEN ================= -->
+    <div id="screen-start" class="screen">
+      <div class="panel">
+        <h1 class="logo"><span class="kicker">Scout Life's</span>GaGa <span>Brawl</span></h1>
+
+        <div class="tabs">
+          <button class="tab selected" data-tab="play">Play</button>
+          <button class="tab" data-tab="help">How to Play</button>
+        </div>
+
+        <!-- PLAY TAB: just the options -->
+        <div class="tabpage" id="tab-play">
+          <div class="section">
+            <h2>Pick your brawler</h2>
+            <div id="char-picker" class="char-picker"><!-- filled by JS --></div>
+          </div>
+
+          <div class="section">
+            <h2>Elimination mode</h2>
+            <div class="mode-picker">
+              <button class="mode-btn selected" data-mode="lives">
+                <span class="mode-title">3 Lives</span>
+                <span class="mode-desc">Take up to 3 hits before you're out.</span>
+              </button>
+              <button class="mode-btn" data-mode="oneHit">
+                <span class="mode-title">1-Hit (Classic)</span>
+                <span class="mode-desc">Any solid ball contact = instant out.</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>Difficulty</h2>
+            <div class="diff-picker">
+              <button class="diff-btn" data-diff="easy">Easy</button>
+              <button class="diff-btn selected" data-diff="normal">Normal</button>
+              <button class="diff-btn" data-diff="hard">Hard</button>
+            </div>
+          </div>
+
+          <button id="btn-start" class="big-btn">START GAME</button>
+          <p id="best-line" class="hint"></p>
+        </div>
+
+        <!-- HOW-TO-PLAY TAB: instructions + power-up legend -->
+        <div class="tabpage hidden" id="tab-help">
+          <div class="section">
+            <h2>The basics</h2>
+            <p class="rule">Move with your mouse or finger — you bat the ball automatically on contact. Last brawler standing wins the round.</p>
+            <p class="rule rule-danger"><b>A glowing red-hot ball knocks you out.</b> A calm ball is safe to bat. Keep the ball moving fast to knock out your rivals!</p>
+          </div>
+
+          <div class="section">
+            <h2>Power-ups</h2>
+            <div id="power-legend" class="legend"><!-- filled by JS --></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= ROUND CLEAR SCREEN ================= -->
+    <div id="screen-round" class="screen hidden">
+      <div class="panel small">
+        <h1 class="burst">ROUND CLEAR!</h1>
+        <p id="round-score" class="score-line"></p>
+        <p id="round-next" class="tagline"></p>
+        <p id="round-newpower" class="newpower hidden"></p>
+        <button id="btn-next" class="big-btn">NEXT ROUND</button>
+      </div>
+    </div>
+
+    <!-- ================= GAME OVER SCREEN ================= -->
+    <div id="screen-over" class="screen hidden">
+      <div class="panel small">
+        <h1 class="logo gameover">GAME OVER</h1>
+        <p id="over-result" class="tagline"></p>
+        <div id="over-score" class="over-score"></div>
+        <p id="over-best" class="hint"></p>
+        <button id="btn-again" class="big-btn">PLAY AGAIN</button>
+      </div>
+    </div>
+
+    <!-- ================= IN-GAME HUD ================= -->
+    <div id="hud" class="hud hidden">
+      <div class="hud-left">
+        <div class="hud-round">ROUND <span id="hud-round-num">1</span></div>
+        <div id="hud-score" class="hud-score">0</div>
+        <div id="hud-lives" class="hud-lives"></div>
+        <div id="hud-alive" class="hud-alive"></div>
+      </div>
+      <div id="hud-powers" class="hud-powers"></div>
+      <div id="hud-combo" class="hud-combo hidden">
+        <span class="hc-count"></span>
+        <span class="hc-bar"><span class="hc-fill"></span></span>
+      </div>
+    </div>
+
+    <!-- ================= PAUSE OVERLAY ================= -->
+    <div id="screen-pause" class="screen hidden">
+      <div class="panel small">
+        <h1 class="burst">PAUSED</h1>
+        <button id="btn-resume" class="big-btn">RESUME</button>
+        <p class="hint">Press P or Esc to resume</p>
+      </div>
+    </div>
+
+    <!-- ================= AUDIO CONTROL ================= -->
+    <div id="audio-ctrl" class="audio-ctrl">
+      <button id="btn-pause" class="pause-btn hidden" title="Pause (P)" aria-label="Pause">⏸</button>
+      <button id="btn-mute" class="mute-btn" title="Mute / unmute" aria-label="Mute">🔊</button>
+      <input id="vol" class="vol" type="range" min="0" max="100" value="60" aria-label="Volume" />
+    </div>
+
+    <!-- Center toast for round countdowns / power-up grabs -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <!-- Ordered classic scripts (no modules) so it also runs from file:// without a server. -->
+  <script src="js/config.463395c5.js"></script>
+  <script src="js/audio.3511eaef.js"></script>
+  <script src="js/geometry.8c8773e4.js"></script>
+  <script src="js/particles.d2ff5f19.js"></script>
+  <script src="js/powerups.54ae3bf5.js"></script>
+  <script src="js/obstacles.271fa4df.js"></script>
+  <script src="js/sprites.26e0e93e.js"></script>
+  <script src="js/entities.108d2ae1.js"></script>
+  <script src="js/ai.5fdfced5.js"></script>
+  <script src="js/render.16476b85.js"></script>
+  <script src="js/ui.a9013e0e.js"></script>
+  <script src="js/game.6393147c.js"></script>
+</body>
+</html>
