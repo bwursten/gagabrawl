@@ -70,6 +70,28 @@
     MULTIBALL_MS: 9000,      // lifespan of an extra ball from Multi-Ball
     MAX_BALLS: 3,            // safety cap on simultaneous balls
 
+    // ---- Obstacles (appear in later rounds to keep things fresh) ----
+    OBSTACLES: {
+      FIRST_ROUND: 3,        // no obstacles before this round
+      MAX: 5,                // hard cap on simultaneous obstacles
+      // Type becomes available at/after this round (layouts pick from unlocked).
+      UNLOCK: { pillar: 3, bumper: 4, hazard: 5, mover: 6 },
+      RADIUS: { pillar: 44, bumper: 40, hazard: 96, mover: 38 },
+      CENTER_CLEAR: 210,     // keep obstacles this far from the pit center (serve zone)
+      SPACING: 34,           // minimum gap between obstacles
+      RESTITUTION: 1.0,      // ball bounciness off solid obstacles
+      BUMPER_BOOST: 3.2,     // speed added when the ball hits an accelerator
+      BUMPER_MIN_SPEED: 9.5, // accelerator always launches the ball at least this fast (hot)
+      HAZARD_ACCEL: 1.035,   // per-frame speed multiplier while the ball is over a hazard
+      HAZARD_MIN_SPEED: 8.5, // hazard heats the ball to at least this speed
+      MOVER_SPEED: 0.0075,   // orbit angular speed (radians/frame)
+      MOVER_MAX_ORBIT: 0.62, // mover orbit radius as a fraction of pit radius (keeps it inside)
+    },
+
+    // ---- Boss rounds ----
+    BOSS_EVERY: 5,           // every Nth round features a champion brawler
+    BOSS: { sizeMult: 1.5, speedMult: 1.12, aggroMult: 1.5, extraLives: 2 },
+
     LIVES: 3,           // starting lives in 3-Lives mode
     MAX_LIVES: 5,       // Extra Life can stack hearts up to this (shows extra hearts in the HUD)
 

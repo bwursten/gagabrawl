@@ -233,7 +233,10 @@
     showRoundClear(nextRound, newPowers, score) {
       const rs = el("round-score");
       if (rs) rs.textContent = `${(score || 0).toLocaleString()} pts`;
-      el("round-next").textContent = `Get ready for Round ${nextRound}!`;
+      const boss = C.BOSS_EVERY && nextRound % C.BOSS_EVERY === 0;
+      el("round-next").textContent = boss
+        ? `Round ${nextRound}: BOSS ROUND — a Champion awaits!`
+        : `Get ready for Round ${nextRound}!`;
       const np = el("round-newpower");
       if (newPowers && newPowers.length) {
         const names = newPowers.map((id) => `${C.POWERUPS[id].icon} ${C.POWERUPS[id].label}`).join("  •  ");

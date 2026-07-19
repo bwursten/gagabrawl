@@ -102,7 +102,7 @@
   //   [{ target: Character }]
   // roundSpeedCap gradually rises over the round for the speed ramp.
   // ---------------------------------------------------------
-  function stepBall(ball, chars, oct, speedFloor, launchBase, magnetHolders, fx, audio) {
+  function stepBall(ball, chars, oct, speedFloor, launchBase, magnetHolders, fx, audio, obstacles) {
     const now = performance.now();
 
     // Magnet Hands: bend the ball toward the nearest magnet holder in range.
@@ -158,6 +158,47 @@
       ball.wallFlash = now;
       if (fx && ball.speed > C.HIT_SPEED * 0.7) fx.shockwave(ball.x, ball.y, "#7ff0ff");
       if (audio) audio.wallBounce(ball.speed);
+    }
+
+    // Obstacle collisions (later rounds). Solid obstacles bounce the ball;
+    // accelerators also speed/heat it; hazard zones heat the ball passing over.
+    if (obstacles && obstacles.length) {
+      const O = C.OBSTACLES;
+      for (const o of obstacles) {
+        const dx = ball.x - o.x, dy = ball.y - o.y;
+        const dd = Math.hypot(dx, dy) || 0.0001;
+        if (o.hazard) {
+          if (dd < o.r) {
+            const target = Math.max(ball.speed, O.HAZARD_MIN_SPEED);
+            ball.setSpeed(Math.min(C.BALL_MAX_SPEED, target * O.HAZARD_ACCEL));
+            ball.overHazard = now;
+          }
+          continue;
+        }
+        const min = ball.r + o.r;
+        if (dd < min) {
+          const raw = Math.hypot(dx, dy);
+          const nx = raw < 0.0001 ? 1 : dx / dd;
+          const ny = raw < 0.0001 ? 0 : dy / dd;
+          ball.x = o.x + nx * min;
+          ball.y = o.y + ny * min;
+          const ref = GEO.reflect(ball.vx, ball.vy, nx, ny, O.RESTITUTION);
+          ball.vx = ref.vx; ball.vy = ref.vy;
+          if (o.accel) {
+            const boosted = Math.min(C.BALL_MAX_SPEED, Math.max(ball.speed + O.BUMPER_BOOST, O.BUMPER_MIN_SPEED));
+            ball.setSpeed(boosted);
+            ball.vz = Math.min(9, boosted * 0.5);
+          } else if (ball.speed > C.HIT_SPEED) {
+            ball.vz = Math.min(8, ball.speed * 0.5);
+          }
+          ball.squashT = 8;
+          ball.squashAng = Math.atan2(ny, nx);
+          ball.wallFlash = now;
+          o.flash = now;
+          if (fx && ball.speed > C.HIT_SPEED * 0.6) fx.shockwave(ball.x, ball.y, o.accel ? "#ff9b3d" : "#7ff0ff");
+          if (audio) audio.wallBounce(ball.speed);
+        }
+      }
     }
 
     // Character collisions

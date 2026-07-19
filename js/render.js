@@ -180,20 +180,31 @@
     drawMotes(ctx, W, H, theme);
     drawWallFlash(ctx, state, toScreen, scale, theme);
 
+    // Hazard zones are floor effects — draw them under everything else.
+    const obstacles = (state.obstacles && state.obstacles.obstacles) || [];
+    drawHazards(ctx, obstacles, toScreen, scale);
+
     const activeBalls = state.ballLive ? state.balls : [];
 
     // Glows (cached sprites, additive)
     for (const ch of state.chars) if (ch.alive) drawUnderglow(ctx, ch.x, ch.y, ch.r * 1.6, ch.color.fill, toScreen, scale);
     for (const b of activeBalls) drawUnderglow(ctx, b.x, b.y, b.r * 1.5, b.bomb ? "#ff3b3b" : "#ff8a3d", toScreen, scale);
 
-    // Depth sort by world-y.
+    // Depth sort by world-y (solid obstacles included so they occlude correctly).
     const drawables = [];
     for (const ch of state.chars) if (ch.alive) drawables.push({ y: ch.y, kind: "char", obj: ch });
     for (const b of activeBalls) drawables.push({ y: b.y, kind: "ball", obj: b });
+    for (const o of obstacles) if (o.solid) drawables.push({ y: o.y, kind: "obstacle", obj: o });
     drawables.sort((a, b) => a.y - b.y);
     for (const d of drawables) {
-      if (d.kind === "char") drawCharacter(ctx, d.obj, activeBalls, toScreen, scale);
-      else drawBall(ctx, d.obj, toScreen, scale);
+      if (d.kind === "char") {
+        if (d.obj.isBoss) drawBossRing(ctx, d.obj, toScreen, scale);
+        drawCharacter(ctx, d.obj, activeBalls, toScreen, scale);
+      } else if (d.kind === "obstacle") {
+        drawObstacle(ctx, d.obj, toScreen, scale, theme);
+      } else {
+        drawBall(ctx, d.obj, toScreen, scale);
+      }
     }
 
     for (const pk of state.powerups.pickups) drawPickup(ctx, pk, toScreen, scale);
@@ -248,6 +259,77 @@
     ctx.strokeStyle = flash > 0.5 ? "#ffffff" : theme.wall;
     tracePoly(ctx, state.oct.verts, toScreen);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---- Obstacles ----
+  // Hazard floor zones: pulsing red patches with a dashed rim.
+  function drawHazards(ctx, obstacles, toScreen, scale) {
+    const now = performance.now();
+    for (const o of obstacles) {
+      if (!o.hazard) continue;
+      const s = toScreen(o.x, o.y);
+      const rx = o.r * scale, ry = o.r * scale * C.TILT;
+      const pulse = 0.5 + 0.5 * Math.sin(now / 300 + o.x * 0.01);
+      ctx.save();
+      const g = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, rx);
+      g.addColorStop(0, "rgba(255,90,45," + (0.4 + 0.16 * pulse).toFixed(3) + ")");
+      g.addColorStop(0.7, "rgba(255,45,20,0.16)");
+      g.addColorStop(1, "rgba(255,20,10,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "rgba(255,130,70," + (0.5 + 0.3 * pulse).toFixed(3) + ")";
+      ctx.lineWidth = Math.max(1.5, 2.5 * scale);
+      ctx.setLineDash([9 * scale, 6 * scale]);
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, rx * 0.9, ry * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  // Solid obstacles: neon posts. Bumpers glow orange, movers violet, pillars
+  // take the round's wall color. A recent ball hit briefly brightens the rim.
+  function drawObstacle(ctx, o, toScreen, scale, theme) {
+    const s = toScreen(o.x, o.y);
+    const rx = o.r * scale, ry = o.r * scale * C.TILT;
+    let body, rim;
+    if (o.type === "bumper") { body = "#3a1e08"; rim = "#ff9b2f"; }
+    else if (o.type === "mover") { body = "#241033"; rim = "#c07bff"; }
+    else { body = "#0a1230"; rim = theme.wall; }
+    const flash = Math.max(0, 1 - (performance.now() - (o.flash || 0)) / 200);
+    ctx.save();
+    // ground shadow
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath(); ctx.ellipse(s.x, s.y + ry * 0.28, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    // body
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    // neon rim (baked glow via shadowBlur — cheap, few obstacles)
+    ctx.lineWidth = Math.max(2, 4 * scale);
+    ctx.strokeStyle = rim;
+    ctx.shadowColor = rim; ctx.shadowBlur = (9 + flash * 20) * scale;
+    ctx.globalAlpha = 0.92;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx * 0.9, ry * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // bright core
+    ctx.globalAlpha = 0.85 + 0.15 * flash;
+    ctx.fillStyle = lighten(rim, 0.5);
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx * 0.34, ry * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Golden pulsing ground ring marking the boss brawler.
+  function drawBossRing(ctx, ch, toScreen, scale) {
+    const s = toScreen(ch.x, ch.y);
+    const rx = ch.r * scale * 1.3, ry = ch.r * scale * C.TILT * 1.3;
+    const now = performance.now();
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(now / 240);
+    ctx.strokeStyle = "#ffd23f";
+    ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 14 * scale;
+    ctx.lineWidth = Math.max(2, 3 * scale);
+    ctx.beginPath(); ctx.ellipse(s.x, s.y + ry * 0.35, rx, ry * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 

@@ -9,6 +9,7 @@
   const ENT = window.ENT;
   const AI = window.AI;
   const PU = window.PU;
+  const OBS = window.OBS;
   const FX = window.FX;
   const RENDER = window.RENDER;
   const UI = window.UI;
@@ -30,6 +31,7 @@
     ball: null,        // primary ball (also state.balls[0])
     balls: [],         // all balls in play (Multi-Ball adds extras)
     powerups: new PU.PowerUpManager(),
+    obstacles: new window.OBS.ObstacleManager(),
     fx: new FX.Particles(),
     roundStart: 0,
     best: 0,
@@ -216,6 +218,9 @@
     const total = aiN + 1;
     const spawns = spawnRing(total);
 
+    // Every BOSS_EVERY rounds, one opponent is a tougher "champion" brawler.
+    state.isBoss = round % C.BOSS_EVERY === 0;
+
     state.chars = [];
 
     // Player
@@ -238,6 +243,15 @@
         color: aiColors[i], isPlayer: false, lives: C.LIVES,
       });
       ai.aiSpeed = aiSpeed;
+      // On a boss round, promote the first opponent to a champion: bigger,
+      // faster, tougher, and more aggressive.
+      if (state.isBoss && i === 0) {
+        ai.isBoss = true;
+        ai.r = C.CHAR_RADIUS * C.BOSS.sizeMult;
+        ai.aiSpeed = aiSpeed * C.BOSS.speedMult;
+        if (state.mode === "lives") ai.lives = C.LIVES + C.BOSS.extraLives;
+        ai.name = "Champion";
+      }
       state.chars.push(ai);
     }
 
@@ -249,6 +263,7 @@
     state.ballLive = false;
 
     state.powerups.reset(round, state.oct, state.diff.powerEvery);
+    state.obstacles.reset(round, state.oct);
     state.roundStart = performance.now();
     state.aggro = aiAggroForRound(round);
     state.combo.count = 0; state.combo.time = 0;
@@ -516,13 +531,24 @@
       player.x = c.x; player.y = c.y;
     }
 
-    // AI — each opponent reacts to the ball nearest to it.
+    // AI — each opponent reacts to the ball nearest to it (bosses more aggressively).
     for (const ch of state.chars) {
       if (ch.isPlayer || !ch.alive) continue;
-      AI.updateAI(ch, nearestBall(ch.x, ch.y), state.chars, state.oct, state.aggro);
+      const agg = ch.isBoss ? Math.min(0.95, state.aggro * C.BOSS.aggroMult) : state.aggro;
+      AI.updateAI(ch, nearestBall(ch.x, ch.y), state.chars, state.oct, agg);
     }
 
     ENT.separateChars(state.chars);
+
+    // Obstacles: advance movers, push everyone out of solid obstacles, then
+    // re-clamp inside the pit walls so nothing gets shoved through a wall.
+    state.obstacles.update(state.oct);
+    for (const ch of state.chars) {
+      if (!ch.alive) continue;
+      OBS.collideChar(ch, state.obstacles.obstacles);
+      const cc = GEO.clampCircleInside(state.oct, ch.x, ch.y, ch.r);
+      ch.x = cc.x; ch.y = cc.y;
+    }
 
     // Ball physics only runs once the ball is in play.
     if (state.ballLive) {
@@ -532,7 +558,7 @@
       for (const b of state.balls) {
         // Ball size (giant power-up)
         b.r = b.giant ? b.baseR * C.BALL_GIANT_SCALE : b.baseR;
-        const events = ENT.stepBall(b, state.chars, state.oct, floor, lb, magnetHolders, state.fx, AUDIO);
+        const events = ENT.stepBall(b, state.chars, state.oct, floor, lb, magnetHolders, state.fx, AUDIO, state.obstacles.obstacles);
         for (const ev of events) applyDamage(ev.target, b, ev.attacker);
       }
       manageBalls();
@@ -580,6 +606,8 @@
 
   // Idle demo scene behind the start screen (ball + wandering AI, no stakes).
   function setupDemo() {
+    state.obstacles.obstacles = [];   // no obstacles on the title/demo scene
+    state.isBoss = false;
     state.chars = [];
     const colors = pickAIColors(4, -1);
     const spawns = spawnRing(4);
