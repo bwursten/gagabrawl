@@ -11,8 +11,7 @@
     // Logical world is a square. Rendering scales this to the canvas.
     WORLD: 1000,
     PIT_MARGIN: 90,          // gap between world edge and pit wall (desktop)
-    PIT_MARGIN_MOBILE: 24,   // slim gap on phones so the pit fills more width
-    WORLD_ASPECT_MAX: 1.85,  // tallest the mobile world may stretch (height / width)
+    PIT_MARGIN_MOBILE: 16,   // slim gap on phones so the (square) pit fills more width
     WALL_THICKNESS: 26,
     TILT: 0.90,              // vertical squash to fake an angled top-down view (1 = flat top-down)
 

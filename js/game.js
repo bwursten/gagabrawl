@@ -80,22 +80,13 @@
     updateWorld();
   }
 
-  // On mobile portrait the canvas is much taller than wide; stretch the world
-  // vertically so the pit fills the screen instead of leaving empty bands, and
-  // use a slimmer wall margin. Desktop keeps the original square world.
+  // The world stays square (even octagon) on every device; mobile just uses a
+  // slimmer wall margin so the pit fills more of a phone's width.
   function updateWorld() {
-    const W = canvas.width, H = canvas.height;
     const mobile = window.matchMedia("(max-width: 820px), (pointer: coarse)").matches;
     const margin = mobile ? C.PIT_MARGIN_MOBILE : C.PIT_MARGIN;
-    let worldH = C.WORLD;
-    if (mobile && H > W) {
-      // Choose worldH so fit-to-width and fit-to-height match (no letterbox),
-      // capped so very tall phones don't turn the pit into a thin corridor.
-      worldH = C.WORLD * (H / W) / C.TILT;
-      worldH = Math.max(C.WORLD, Math.min(worldH, C.WORLD * C.WORLD_ASPECT_MAX));
-    }
-    state.world = { w: C.WORLD, h: worldH };
-    state.oct = GEO.buildOctagon(C.WORLD, worldH, margin);
+    state.world = { w: C.WORLD, h: C.WORLD };
+    state.oct = GEO.buildOctagon(C.WORLD, C.WORLD, margin);
   }
   window.addEventListener("resize", resize);
 
