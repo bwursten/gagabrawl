@@ -305,12 +305,12 @@
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.scale(1, TILT);
-      const g = ctx.createRadialGradient(0, 0, 1, 0, 0, r);
-      g.addColorStop(0, "rgba(255,90,45," + (0.34 + 0.16 * pulse).toFixed(3) + ")");
-      g.addColorStop(0.65, "rgba(255,50,25,0.14)");
-      g.addColorStop(1, "rgba(255,25,12,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      // Cached glow sprite instead of a per-frame radial gradient.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.3 + 0.16 * pulse;
+      ctx.drawImage(SPR.glowPuddle("#ff5a2d"), -r, -r, r * 2, r * 2);
+      ctx.restore();
       // rotating dashed hazard ring
       ctx.rotate(now / 2600);
       ctx.strokeStyle = "rgba(255,140,70," + (0.55 + 0.3 * pulse).toFixed(3) + ")";
@@ -355,16 +355,27 @@
     ctx.restore();
   }
 
+  // Soft neon glow behind an obstacle, using the cached glow sprite instead of
+  // per-frame shadowBlur. Called inside the obstacle's translated + TILT-scaled
+  // context (centered at 0,0), so the round sprite becomes an ellipse via TILT.
+  function stampHalo(ctx, color, r, alpha) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(SPR.glowPuddle(color), -r, -r, r * 2, r * 2);
+    ctx.restore();
+  }
+
   function drawPillar(ctx, r, scale, now, flash, theme) {
     const col = theme.wall;
     const rot = now / 2600;
+    stampHalo(ctx, col, r * 1.5, 0.26 + flash * 0.4);
     ctx.globalAlpha = 0.16; ctx.fillStyle = col;
     polyPath(ctx, r * 0.95, 8, rot); ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (10 + flash * 22) * scale;
+    ctx.strokeStyle = col;
     ctx.lineWidth = Math.max(2.5, 4 * scale);
     polyPath(ctx, r * 0.95, 8, rot); ctx.stroke();
-    ctx.shadowBlur = 0;
     ctx.strokeStyle = lighten(col, 0.6); ctx.globalAlpha = 0.9;
     ctx.lineWidth = Math.max(1.5, 2 * scale);
     polyPath(ctx, r * 0.5, 8, -rot * 1.6); ctx.stroke();
@@ -374,10 +385,10 @@
   function drawBumper(ctx, r, scale, now, flash) {
     const col = "#ff9b2f";
     const pulse = 0.86 + 0.14 * Math.sin(now / 180);
-    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (12 + flash * 24) * scale;
+    stampHalo(ctx, col, r * 1.6 * pulse, 0.28 + flash * 0.4);
+    ctx.strokeStyle = col;
     ctx.lineWidth = Math.max(2.5, 5 * scale);
     ctx.beginPath(); ctx.arc(0, 0, r * pulse, 0, Math.PI * 2); ctx.stroke();
-    ctx.shadowBlur = 0;
     ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1.5, 2.5 * scale);
     ctx.beginPath(); ctx.arc(0, 0, r * 0.58, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
@@ -398,30 +409,33 @@
 
   function drawMover(ctx, r, scale, now, flash) {
     const col = "#c07bff";
+    stampHalo(ctx, col, r * 1.5, 0.26 + flash * 0.4);
     ctx.rotate(now / 500);
     ctx.globalAlpha = 0.18; ctx.fillStyle = col;
     starPath(ctx, r * 0.98, r * 0.42, 4, 0); ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (10 + flash * 22) * scale;
+    ctx.strokeStyle = col;
     ctx.lineWidth = Math.max(2.5, 4 * scale);
     starPath(ctx, r * 0.98, r * 0.42, 4, 0); ctx.stroke();
-    ctx.shadowBlur = 0;
     ctx.fillStyle = lighten(col, 0.6);
     ctx.beginPath(); ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2); ctx.fill();
   }
 
-  // Golden pulsing ground ring marking the boss brawler.
+  // Golden pulsing ground ring marking the boss brawler (cached glow, no shadowBlur).
   function drawBossRing(ctx, ch, toScreen, scale) {
     const s = toScreen(ch.x, ch.y);
     const rx = ch.r * scale * 1.3, ry = ch.r * scale * TILT * 1.3;
     const now = performance.now();
+    const cy = s.y + ry * 0.35;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.32 + 0.18 * Math.sin(now / 240);
+    const d = rx * 2.6;
+    ctx.drawImage(SPR.glowPuddle("#ffd23f"), s.x - d / 2, cy - d / 2 * TILT, d, d * TILT);
     ctx.globalAlpha = 0.5 + 0.3 * Math.sin(now / 240);
     ctx.strokeStyle = "#ffd23f";
-    ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 14 * scale;
     ctx.lineWidth = Math.max(2, 3 * scale);
-    ctx.beginPath(); ctx.ellipse(s.x, s.y + ry * 0.35, rx, ry * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(s.x, cy, rx, ry * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 

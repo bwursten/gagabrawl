@@ -92,7 +92,13 @@
     state.world = { w: C.WORLD, h: C.WORLD };
     state.oct = GEO.buildOctagon(C.WORLD, C.WORLD, margin);
   }
-  window.addEventListener("resize", resize);
+  // Debounce resize: a window drag fires it continuously, and each call
+  // resizes the canvas (invalidating the baked-arena cache). Coalesce them.
+  let _resizeTimer = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(resize, 120);
+  });
 
   // ------------------------------------------------------------
   // Input — pointer position mapped back into world coordinates.
@@ -453,7 +459,8 @@
   }
 
   function checkEnd() {
-    const alive = state.chars.filter((c) => c.alive);
+    let aliveCount = 0;
+    for (const c of state.chars) if (c.alive) aliveCount++;
     const playerAlive = state.player.alive;
 
     if (!playerAlive) {
@@ -470,7 +477,7 @@
       }, 900);
       return;
     }
-    if (alive.length <= 1) {
+    if (aliveCount <= 1) {
       // Player is last standing -> round clear.
       state.phase = "roundclear";
       addScore(C.SCORE.ROUND_CLEAR * state.round);  // survival bonus grows each round
@@ -586,7 +593,6 @@
     trackMotion(true);
     state.fx.update();
 
-    UI.updateHud(state);
     checkEnd();
   }
 
@@ -680,6 +686,9 @@
     while (_acc >= SIM_STEP && steps < 5) { tick(); _acc -= SIM_STEP; steps++; }
 
     RENDER.draw(ctx, state);
+    // HUD refreshes once per rendered frame (not per sim tick, which can run
+    // several times per frame) — big reduction in DOM churn.
+    if (state.phase === "playing") UI.updateHud(state);
     requestAnimationFrame(frame);
   }
 

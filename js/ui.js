@@ -154,37 +154,58 @@
 
     // ---- HUD ----
     updateHud(state) {
-      el("hud-round-num").textContent = state.round;
-      const scoreEl = el("hud-score");
-      if (scoreEl) scoreEl.textContent = (state.score || 0).toLocaleString();
+      // Cache element handles once (called every rendered frame, so avoid
+      // re-querying the DOM and only write when a value actually changes).
+      const h = this._hud || (this._hud = {
+        round: el("hud-round-num"),
+        score: el("hud-score"),
+        combo: el("hud-combo"),
+        comboCount: el("hud-combo") && el("hud-combo").querySelector(".hc-count"),
+        comboFill: el("hud-combo") && el("hud-combo").querySelector(".hc-fill"),
+        lives: el("hud-lives"),
+        alive: el("hud-alive"),
+        powers: el("hud-powers"),
+      });
+      const now = performance.now();
+      const player = state.player;
+
+      if (h.round) h.round.textContent = state.round;
+
+      const scoreStr = (state.score || 0).toLocaleString();
+      if (h.score && scoreStr !== this._lastScore) { h.score.textContent = scoreStr; this._lastScore = scoreStr; }
 
       // Live combo meter: appears while a knockout chain (2+) is still within
       // its window, with a bar that drains as the window runs out.
-      const comboEl = el("hud-combo");
-      if (comboEl) {
-        const remain = C.COMBO_WINDOW - (performance.now() - state.combo.time);
+      if (h.combo) {
+        const remain = C.COMBO_WINDOW - (now - state.combo.time);
         if (state.combo.count >= 2 && remain > 0) {
-          comboEl.classList.remove("hidden");
-          comboEl.querySelector(".hc-count").textContent = state.combo.count + "x COMBO";
-          comboEl.querySelector(".hc-fill").style.width =
+          h.combo.classList.remove("hidden");
+          if (h.comboCount) h.comboCount.textContent = state.combo.count + "x COMBO";
+          if (h.comboFill) h.comboFill.style.width =
             Math.max(0, Math.min(100, (remain / C.COMBO_WINDOW) * 100)) + "%";
         } else {
-          comboEl.classList.add("hidden");
+          h.combo.classList.add("hidden");
         }
       }
 
-      const player = state.player;
-      const livesEl = el("hud-lives");
+      let livesStr;
       if (state.mode === "lives" && player.alive) {
-        livesEl.textContent = "❤️".repeat(player.lives) + "🖤".repeat(Math.max(0, C.LIVES - player.lives));
+        livesStr = "❤️".repeat(player.lives) + "🖤".repeat(Math.max(0, C.LIVES - player.lives));
       } else {
-        livesEl.textContent = state.mode === "oneHit" ? "☝️ 1-Hit" : "";
+        livesStr = state.mode === "oneHit" ? "☝️ 1-Hit" : "";
       }
-      const aliveCount = state.chars.filter((c) => c.alive).length;
-      el("hud-alive").textContent = `${aliveCount} left in the pit`;
+      if (h.lives && livesStr !== this._lastLives) { h.lives.textContent = livesStr; this._lastLives = livesStr; }
 
-      // Active power chips for the player
-      const now = performance.now();
+      let aliveCount = 0;
+      for (const c of state.chars) if (c.alive) aliveCount++;
+      if (h.alive && aliveCount !== this._lastAlive) {
+        h.alive.textContent = `${aliveCount} left in the pit`;
+        this._lastAlive = aliveCount;
+      }
+
+      // Active power chips for the player. The bar widths animate, so the
+      // string changes while a timed power is active; when none are active the
+      // string is "" and the dirty-check skips the innerHTML write entirely.
       const chips = [];
       const p = player;
       const balls = state.balls || [];
@@ -198,7 +219,8 @@
         if (p.shield) chips.push(chip("shield", 1, 1));
         if (p.frozen) chips.push(chip("freeze", p.frozenUntil - now, C.DURATIONS.freeze));
       }
-      el("hud-powers").innerHTML = chips.join("");
+      const chipsHTML = chips.join("");
+      if (h.powers && chipsHTML !== this._lastChips) { h.powers.innerHTML = chipsHTML; this._lastChips = chipsHTML; }
 
       function chip(id, remain, total) {
         const def = C.POWERUPS[id];
