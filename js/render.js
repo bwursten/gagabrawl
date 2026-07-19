@@ -16,19 +16,24 @@
   const C = window.CONFIG;
   const SPR = window.SPR;
 
+  // Effective perspective squash for the current frame (set in draw() from
+  // state.tilt so mobile can use a flatter, un-squished view). All render
+  // helpers read this instead of TILT directly.
+  let TILT = C.TILT;
+
   // Fit-and-center the world into a canvas of any aspect ratio: the pit is
   // centered and scaled to fit both dimensions (letterboxing with arena
   // background). Works for square (desktop) and tall (mobile) canvases alike.
   function fitScale(W, H, worldW, worldH) {
     worldW = worldW || C.WORLD;
     worldH = worldH || C.WORLD;
-    return Math.min(W / worldW, H / (worldH * C.TILT));
+    return Math.min(W / worldW, H / (worldH * TILT));
   }
   function makeToScreen(scale, W, H, worldW, worldH) {
     const halfX = (worldW || C.WORLD) / 2;
     const halfY = (worldH || C.WORLD) / 2;
     return function (x, y) {
-      return { x: W / 2 + (x - halfX) * scale, y: H / 2 + (y - halfY) * C.TILT * scale };
+      return { x: W / 2 + (x - halfX) * scale, y: H / 2 + (y - halfY) * TILT * scale };
     };
   }
 
@@ -56,7 +61,7 @@
   let arena = { key: "", base: null, vignette: null };
 
   function getArena(w, h, scale, theme, oct, world) {
-    const key = w + "x" + h + ":" + theme.name + ":" + Math.round((world && world.h) || C.WORLD);
+    const key = w + "x" + h + ":" + theme.name + ":" + Math.round((world && world.h) || C.WORLD) + ":" + Math.round(TILT * 100);
     if (arena.key === key && arena.base) return arena;
     arena.key = key;
     arena.base = buildArenaBase(w, h, scale, theme, oct, world);
@@ -117,7 +122,7 @@
     for (let i = 1; i <= 3; i++) {
       ctx.beginPath();
       const rr = oct.R * scale * (i / 4);
-      ctx.ellipse(c.x, c.y, rr, rr * C.TILT, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x, c.y, rr, rr * TILT, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.restore();
@@ -155,6 +160,7 @@
   function draw(ctx, state) {
     const canvas = ctx.canvas;
     const W = canvas.width, H = canvas.height;
+    TILT = state.tilt || C.TILT;
     const world = state.world || { w: C.WORLD, h: C.WORLD };
     const scale = fitScale(W, H, world.w, world.h);
     const toScreen = makeToScreen(scale, W, H, world.w, world.h);
@@ -263,65 +269,151 @@
   }
 
   // ---- Obstacles ----
-  // Hazard floor zones: pulsing red patches with a dashed rim.
+  // Neon polygon path (centered at 0,0; local space) — points on a circle of
+  // radius r, offset so it reads flat-topped like the arena wall.
+  function polyPath(ctx, r, sides, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < sides; i++) {
+      const a = rot + (i * 2 * Math.PI) / sides + Math.PI / sides;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  // Star path (alternating outer/inner radius) in local space.
+  function starPath(ctx, outer, inner, points, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const a = rot + (Math.PI / points) * i - Math.PI / 2;
+      const rr = i % 2 ? inner : outer;
+      const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  // Hazard floor zones: pulsing neon-red pool with a rotating dashed hazard
+  // ring and warning spokes.
   function drawHazards(ctx, obstacles, toScreen, scale) {
     const now = performance.now();
     for (const o of obstacles) {
       if (!o.hazard) continue;
       const s = toScreen(o.x, o.y);
-      const rx = o.r * scale, ry = o.r * scale * C.TILT;
+      const r = o.r * scale;
       const pulse = 0.5 + 0.5 * Math.sin(now / 300 + o.x * 0.01);
       ctx.save();
-      const g = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, rx);
-      g.addColorStop(0, "rgba(255,90,45," + (0.4 + 0.16 * pulse).toFixed(3) + ")");
-      g.addColorStop(0.7, "rgba(255,45,20,0.16)");
-      g.addColorStop(1, "rgba(255,20,10,0)");
+      ctx.translate(s.x, s.y);
+      ctx.scale(1, TILT);
+      const g = ctx.createRadialGradient(0, 0, 1, 0, 0, r);
+      g.addColorStop(0, "rgba(255,90,45," + (0.34 + 0.16 * pulse).toFixed(3) + ")");
+      g.addColorStop(0.65, "rgba(255,50,25,0.14)");
+      g.addColorStop(1, "rgba(255,25,12,0)");
       ctx.fillStyle = g;
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "rgba(255,130,70," + (0.5 + 0.3 * pulse).toFixed(3) + ")";
-      ctx.lineWidth = Math.max(1.5, 2.5 * scale);
-      ctx.setLineDash([9 * scale, 6 * scale]);
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, rx * 0.9, ry * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      // rotating dashed hazard ring
+      ctx.rotate(now / 2600);
+      ctx.strokeStyle = "rgba(255,140,70," + (0.55 + 0.3 * pulse).toFixed(3) + ")";
+      ctx.lineWidth = Math.max(1.5, 3 * scale);
+      ctx.setLineDash([10 * scale, 7 * scale]);
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
+      // warning spokes
+      ctx.strokeStyle = "rgba(255,185,115," + (0.35 + 0.4 * pulse).toFixed(3) + ")";
+      ctx.lineWidth = Math.max(1.5, 2.5 * scale);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        ctx.moveTo(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3);
+        ctx.lineTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5);
+      }
+      ctx.stroke();
       ctx.restore();
     }
   }
 
-  // Solid obstacles: neon posts. Bumpers glow orange, movers violet, pillars
-  // take the round's wall color. A recent ball hit briefly brightens the rim.
+  // Solid obstacles as neon-tube structures matching the arena aesthetic:
+  //   pillar — slowly rotating octagon in the round's wall color
+  //   bumper — pulsing orange ring with outward boost chevrons
+  //   mover  — spinning violet 4-point star
   function drawObstacle(ctx, o, toScreen, scale, theme) {
     const s = toScreen(o.x, o.y);
-    const rx = o.r * scale, ry = o.r * scale * C.TILT;
-    let body, rim;
-    if (o.type === "bumper") { body = "#3a1e08"; rim = "#ff9b2f"; }
-    else if (o.type === "mover") { body = "#241033"; rim = "#c07bff"; }
-    else { body = "#0a1230"; rim = theme.wall; }
-    const flash = Math.max(0, 1 - (performance.now() - (o.flash || 0)) / 200);
+    const r = o.r * scale;
+    const now = performance.now();
+    const flash = Math.max(0, 1 - (now - (o.flash || 0)) / 220);
     ctx.save();
-    // ground shadow
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.beginPath(); ctx.ellipse(s.x, s.y + ry * 0.28, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
-    // body
-    ctx.fillStyle = body;
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
-    // neon rim (baked glow via shadowBlur — cheap, few obstacles)
-    ctx.lineWidth = Math.max(2, 4 * scale);
-    ctx.strokeStyle = rim;
-    ctx.shadowColor = rim; ctx.shadowBlur = (9 + flash * 20) * scale;
-    ctx.globalAlpha = 0.92;
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx * 0.9, ry * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.shadowBlur = 0;
-    // bright core
-    ctx.globalAlpha = 0.85 + 0.15 * flash;
-    ctx.fillStyle = lighten(rim, 0.5);
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx * 0.34, ry * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(s.x, s.y);
+    ctx.scale(1, TILT);              // draw in circular space; perspective via transform
+    ctx.lineJoin = "round";
+    // soft ground shadow
+    ctx.fillStyle = "rgba(0,0,0,0.30)";
+    ctx.beginPath(); ctx.arc(0, r * 0.32, r * 0.96, 0, Math.PI * 2); ctx.fill();
+
+    if (o.type === "bumper") drawBumper(ctx, r, scale, now, flash);
+    else if (o.type === "mover") drawMover(ctx, r, scale, now, flash);
+    else drawPillar(ctx, r, scale, now, flash, theme);
     ctx.restore();
+  }
+
+  function drawPillar(ctx, r, scale, now, flash, theme) {
+    const col = theme.wall;
+    const rot = now / 2600;
+    ctx.globalAlpha = 0.16; ctx.fillStyle = col;
+    polyPath(ctx, r * 0.95, 8, rot); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (10 + flash * 22) * scale;
+    ctx.lineWidth = Math.max(2.5, 4 * scale);
+    polyPath(ctx, r * 0.95, 8, rot); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = lighten(col, 0.6); ctx.globalAlpha = 0.9;
+    ctx.lineWidth = Math.max(1.5, 2 * scale);
+    polyPath(ctx, r * 0.5, 8, -rot * 1.6); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBumper(ctx, r, scale, now, flash) {
+    const col = "#ff9b2f";
+    const pulse = 0.86 + 0.14 * Math.sin(now / 180);
+    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (12 + flash * 24) * scale;
+    ctx.lineWidth = Math.max(2.5, 5 * scale);
+    ctx.beginPath(); ctx.arc(0, 0, r * pulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1.5, 2.5 * scale);
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.58, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // outward boost chevrons
+    const rot = now / 700;
+    ctx.strokeStyle = lighten(col, 0.5); ctx.lineWidth = Math.max(2, 3 * scale);
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate(rot + (i * Math.PI) / 2);
+      ctx.translate(r * 0.74, 0);
+      const s2 = r * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(-s2, -s2); ctx.lineTo(s2 * 0.55, 0); ctx.lineTo(-s2, s2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawMover(ctx, r, scale, now, flash) {
+    const col = "#c07bff";
+    ctx.rotate(now / 500);
+    ctx.globalAlpha = 0.18; ctx.fillStyle = col;
+    starPath(ctx, r * 0.98, r * 0.42, 4, 0); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (10 + flash * 22) * scale;
+    ctx.lineWidth = Math.max(2.5, 4 * scale);
+    starPath(ctx, r * 0.98, r * 0.42, 4, 0); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = lighten(col, 0.6);
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2); ctx.fill();
   }
 
   // Golden pulsing ground ring marking the boss brawler.
   function drawBossRing(ctx, ch, toScreen, scale) {
     const s = toScreen(ch.x, ch.y);
-    const rx = ch.r * scale * 1.3, ry = ch.r * scale * C.TILT * 1.3;
+    const rx = ch.r * scale * 1.3, ry = ch.r * scale * TILT * 1.3;
     const now = performance.now();
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -387,7 +479,7 @@
 
     const spd = Math.hypot(ch.dispX, ch.dispY);
     const stretch = Math.min(0.28, spd * 0.03);
-    const ang = spd > 0.3 ? Math.atan2(ch.dispY * C.TILT, ch.dispX) : 0;
+    const ang = spd > 0.3 ? Math.atan2(ch.dispY * TILT, ch.dispX) : 0;
     let hk = 0;
     if (ch.squashT > 0) { hk = ch.squashT / 8; ch.squashT--; }
 
@@ -399,7 +491,7 @@
     ctx.scale(1 + stretch, 1 - stretch * 0.55);
     ctx.rotate(-ang);
     ctx.scale(1 + hk * 0.3, 1 - hk * 0.4);
-    ctx.scale(1, C.TILT * 1.05);
+    ctx.scale(1, TILT * 1.05);
     const body = SPR.charBody(ch.color);
     const d = r * 1.16;
     if (ch.frozen) ctx.globalAlpha = 0.85;
@@ -417,7 +509,7 @@
       ctx.fillStyle = "#ffe14d";
       ctx.strokeStyle = "#1b2440";
       ctx.lineWidth = 2;
-      const ay = -r * (C.TILT * 1.05) - 10 * scale;
+      const ay = -r * (TILT * 1.05) - 10 * scale;
       ctx.beginPath();
       ctx.moveTo(0, ay);
       ctx.lineTo(-8 * scale, ay - 12 * scale);
@@ -430,7 +522,7 @@
       ctx.globalAlpha = Math.min(0.7, ch.hitFlash / 10);
       ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.ellipse(0, 0, r, r * C.TILT * 1.05, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, r, r * TILT * 1.05, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
       ch.hitFlash--;
@@ -453,15 +545,15 @@
       ctx.strokeStyle = "#ffb02e";
       ctx.lineWidth = 3 * scale;
       ctx.beginPath();
-      ctx.ellipse(0, 0, r * 1.45, r * C.TILT * 1.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, r * 1.45, r * TILT * 1.5, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.strokeStyle = "#fff3c4";
       ctx.lineWidth = 2 * scale;
       for (let i = 0; i < 5; i++) {
         const a = now / 90 + i * (Math.PI * 2 / 5);
         ctx.beginPath();
-        ctx.moveTo(Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3 * C.TILT);
-        ctx.lineTo(Math.cos(a) * r * (1.7 + Math.random() * 0.3), Math.sin(a) * r * 1.7 * C.TILT);
+        ctx.moveTo(Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3 * TILT);
+        ctx.lineTo(Math.cos(a) * r * (1.7 + Math.random() * 0.3), Math.sin(a) * r * 1.7 * TILT);
         ctx.stroke();
       }
       ctx.restore();
@@ -472,11 +564,11 @@
       ctx.strokeStyle = "rgba(120,215,255,0.95)";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.ellipse(0, 0, r * 1.35 * pulse, r * C.TILT * 1.4 * pulse, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, r * 1.35 * pulse, r * TILT * 1.4 * pulse, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = "rgba(77,195,255,0.12)";
       ctx.beginPath();
-      ctx.ellipse(0, 0, r * 1.35 * pulse, r * C.TILT * 1.4 * pulse, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, r * 1.35 * pulse, r * TILT * 1.4 * pulse, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -493,7 +585,7 @@
         ctx.strokeStyle = "#ff3b2e";
         ctx.lineWidth = 4 * scale;
         ctx.beginPath();
-        ctx.ellipse(0, 0, r * 1.5, r * C.TILT * 1.55, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, r * 1.5, r * TILT * 1.55, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -509,7 +601,7 @@
 
     let tx = 0, ty = 0;
     if (ball) {
-      const dx = ball.x - ch.x, dy = (ball.y - ch.y) * C.TILT;
+      const dx = ball.x - ch.x, dy = (ball.y - ch.y) * TILT;
       const d = Math.hypot(dx, dy) || 1;
       tx = (dx / d) * eyeR * 0.5;
       ty = (dy / d) * eyeR * 0.5;
@@ -597,7 +689,7 @@
       ctx.globalAlpha = f * (0.25 + hot * 0.35);
       ctx.fillStyle = trailCol;
       ctx.beginPath();
-      ctx.ellipse(s.x, s.y - p.z * scale, r * (0.3 + f * (0.5 + hot * 0.3)), r * (0.3 + f * 0.5) * C.TILT, 0, 0, Math.PI * 2);
+      ctx.ellipse(s.x, s.y - p.z * scale, r * (0.3 + f * (0.5 + hot * 0.3)), r * (0.3 + f * 0.5) * TILT, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -613,7 +705,7 @@
       ctx.globalAlpha = 0.3 * a;
       const p = SPR.glowPuddle("#63d9ff");
       const d = r * 3;
-      ctx.drawImage(p, cx - d / 2, cy - d / 2 * C.TILT, d, d * C.TILT);
+      ctx.drawImage(p, cx - d / 2, cy - d / 2 * TILT, d, d * TILT);
       ctx.restore();
     }
     if (hot > 0.3) {
@@ -623,7 +715,7 @@
       ctx.globalAlpha = 0.55 * hot;
       const p = SPR.glowPuddle("#ff5028");
       const d = r * 4 * pulse;
-      ctx.drawImage(p, cx - d / 2, cy - d / 2 * C.TILT, d, d * C.TILT);
+      ctx.drawImage(p, cx - d / 2, cy - d / 2 * TILT, d, d * TILT);
       ctx.globalAlpha = 0.6 * hot;
       ctx.strokeStyle = "#ffdc78";
       ctx.lineWidth = 2 * scale;
@@ -631,8 +723,8 @@
         const a = now / 120 + i * (Math.PI / 3);
         const r0 = r * 1.25, r1 = r * (1.7 + Math.random() * 0.4);
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0 * C.TILT);
-        ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1 * C.TILT);
+        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0 * TILT);
+        ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1 * TILT);
         ctx.stroke();
       }
       ctx.restore();
@@ -646,7 +738,7 @@
     ctx.rotate(ang);
     ctx.scale(1 - sk * 0.4, 1 + sk * 0.25);
     ctx.rotate(-ang);
-    ctx.scale(1, C.TILT * 1.05);
+    ctx.scale(1, TILT * 1.05);
 
     const spr = SPR.ball();
     const d = r * 1.18;

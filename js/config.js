@@ -14,6 +14,7 @@
     PIT_MARGIN_MOBILE: 16,   // slim gap on phones so the (square) pit fills more width
     WALL_THICKNESS: 26,
     TILT: 0.90,              // vertical squash to fake an angled top-down view (1 = flat top-down)
+    TILT_MOBILE: 1.0,        // phones use a flatter (un-squished) view so the pit doesn't look flattened
 
     // ---- Characters ----
     CHAR_RADIUS: 30,

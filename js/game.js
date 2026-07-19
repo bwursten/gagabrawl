@@ -45,6 +45,7 @@
     toScreen: null,
     scale: 1,
     world: { w: C.WORLD, h: C.WORLD },   // logical world size (height grows on mobile portrait)
+    tilt: C.TILT,                         // perspective squash; flatter on mobile so it isn't squished
     shake: 0,          // screen-shake magnitude (world units), decays each frame
     hitStop: 0,        // frames of frozen logic for impact punch
     ballLive: false,   // is the ball in play? (false during the pre-round countdown)
@@ -87,6 +88,7 @@
   function updateWorld() {
     const mobile = window.matchMedia("(max-width: 820px), (pointer: coarse)").matches;
     const margin = mobile ? C.PIT_MARGIN_MOBILE : C.PIT_MARGIN;
+    state.tilt = mobile ? C.TILT_MOBILE : C.TILT;
     state.world = { w: C.WORLD, h: C.WORLD };
     state.oct = GEO.buildOctagon(C.WORLD, C.WORLD, margin);
   }
@@ -101,11 +103,12 @@
     const W = canvas.width, H = canvas.height;
     const ww = state.world.w, wh = state.world.h;
     // Inverse of render's fit-and-center transform (aspect-aware).
-    const scale = Math.min(W / ww, H / (wh * C.TILT));
+    const tilt = state.tilt || C.TILT;
+    const scale = Math.min(W / ww, H / (wh * tilt));
     const cxp = (clientX - rect.left) * (W / rect.width);
     const cyp = (clientY - rect.top) * (H / rect.height);
     const x = ww / 2 + (cxp - W / 2) / scale;
-    const y = wh / 2 + (cyp - H / 2) / (C.TILT * scale);
+    const y = wh / 2 + (cyp - H / 2) / (tilt * scale);
     return { x, y };
   }
 
@@ -142,10 +145,11 @@
   function dragMove(clientX, clientY) {
     if (!state.touch.active) return;
     const p = clientToCanvas(clientX, clientY);
-    const scale = Math.min(canvas.width / state.world.w, canvas.height / (state.world.h * C.TILT));
+    const tilt = state.tilt || C.TILT;
+    const scale = Math.min(canvas.width / state.world.w, canvas.height / (state.world.h * tilt));
     // Screen delta -> world delta (undo tilt on Y), amplified.
     state.dragDX += ((p.x - lastTX) / scale) * C.DRAG_SENS;
-    state.dragDY += ((p.y - lastTY) / (scale * C.TILT)) * C.DRAG_SENS;
+    state.dragDY += ((p.y - lastTY) / (scale * tilt)) * C.DRAG_SENS;
     lastTX = p.x; lastTY = p.y;
     state.touch.x = p.x; state.touch.y = p.y;
   }
