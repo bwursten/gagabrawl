@@ -42,6 +42,7 @@
     dragVX: 0, dragVY: 0,                  // smoothed touch velocity (for natural accel/glide)
     toScreen: null,
     scale: 1,
+    world: { w: C.WORLD, h: C.WORLD },   // logical world size (height grows on mobile portrait)
     shake: 0,          // screen-shake magnitude (world units), decays each frame
     hitStop: 0,        // frames of frozen logic for impact punch
     ballLive: false,   // is the ball in play? (false during the pre-round countdown)
@@ -51,6 +52,9 @@
     diff: null,        // resolved CONFIG.DIFFICULTIES entry
     paused: false,
     combo: { count: 0, time: 0 },  // player knockout streak
+    score: 0,          // run score (KOs + combos + round survival)
+    kos: 0,            // rivals the player has knocked out this run
+    startBest: null,   // best for the chosen config, snapshotted at match start
   };
   state.diff = C.DIFFICULTIES[state.difficulty];
 
@@ -71,6 +75,27 @@
     if (maxSide > MAX) dpr *= MAX / maxSide;
     canvas.width = Math.max(1, Math.round(rect.width * dpr));
     canvas.height = Math.max(1, Math.round(rect.height * dpr));
+
+    // Recompute the logical world to fit the canvas aspect, then rebuild the pit.
+    updateWorld();
+  }
+
+  // On mobile portrait the canvas is much taller than wide; stretch the world
+  // vertically so the pit fills the screen instead of leaving empty bands, and
+  // use a slimmer wall margin. Desktop keeps the original square world.
+  function updateWorld() {
+    const W = canvas.width, H = canvas.height;
+    const mobile = window.matchMedia("(max-width: 820px), (pointer: coarse)").matches;
+    const margin = mobile ? C.PIT_MARGIN_MOBILE : C.PIT_MARGIN;
+    let worldH = C.WORLD;
+    if (mobile && H > W) {
+      // Choose worldH so fit-to-width and fit-to-height match (no letterbox),
+      // capped so very tall phones don't turn the pit into a thin corridor.
+      worldH = C.WORLD * (H / W) / C.TILT;
+      worldH = Math.max(C.WORLD, Math.min(worldH, C.WORLD * C.WORLD_ASPECT_MAX));
+    }
+    state.world = { w: C.WORLD, h: worldH };
+    state.oct = GEO.buildOctagon(C.WORLD, worldH, margin);
   }
   window.addEventListener("resize", resize);
 
@@ -80,13 +105,14 @@
   // ------------------------------------------------------------
   function pointerToWorld(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const W = canvas.width, H = canvas.height, half = C.WORLD / 2;
-    // Inverse of render's fit-and-center transform.
-    const scale = Math.min(W / C.WORLD, H / (C.WORLD * C.TILT));
+    const W = canvas.width, H = canvas.height;
+    const ww = state.world.w, wh = state.world.h;
+    // Inverse of render's fit-and-center transform (aspect-aware).
+    const scale = Math.min(W / ww, H / (wh * C.TILT));
     const cxp = (clientX - rect.left) * (W / rect.width);
     const cyp = (clientY - rect.top) * (H / rect.height);
-    const x = half + (cxp - W / 2) / scale;
-    const y = half + (cyp - H / 2) / (C.TILT * scale);
+    const x = ww / 2 + (cxp - W / 2) / scale;
+    const y = wh / 2 + (cyp - H / 2) / (C.TILT * scale);
     return { x, y };
   }
 
@@ -123,7 +149,7 @@
   function dragMove(clientX, clientY) {
     if (!state.touch.active) return;
     const p = clientToCanvas(clientX, clientY);
-    const scale = Math.min(canvas.width / C.WORLD, canvas.height / (C.WORLD * C.TILT));
+    const scale = Math.min(canvas.width / state.world.w, canvas.height / (state.world.h * C.TILT));
     // Screen delta -> world delta (undo tilt on Y), amplified.
     state.dragDX += ((p.x - lastTX) / scale) * C.DRAG_SENS;
     state.dragDY += ((p.y - lastTY) / (scale * C.TILT)) * C.DRAG_SENS;
@@ -179,7 +205,16 @@
     state.difficulty = choices.difficulty || "normal";
     state.diff = C.DIFFICULTIES[state.difficulty] || C.DIFFICULTIES.normal;
     state.round = 1;
+    state.score = 0;
+    state.kos = 0;
+    state.startBest = getBest();   // remember the bar to beat for "NEW BEST"
     startRound(1, true);
+  }
+
+  // Add (or subtract) points from the run score, scaled by the difficulty's
+  // score multiplier. Penalties may be negative; the total never drops below 0.
+  function addScore(pts) {
+    state.score = Math.max(0, state.score + Math.round(pts * (state.diff.score || 1)));
   }
 
   function startRound(round, freshMatch) {
@@ -315,9 +350,11 @@
   // ------------------------------------------------------------
   // A damaging ball contact. If the ball is a Bomb Ball, it detonates for an
   // area knockout; otherwise it's a normal single hit.
-  function applyDamage(target, ball) {
+  function applyDamage(target, ball, attacker) {
     if (!target.alive) return;
-    const attacker = ball ? ball.lastHitter : null;
+    // Prefer the attacker captured at impact (ball.lastHitter gets reassigned to
+    // the victim during the collision, so reading it here would be wrong).
+    if (attacker === undefined) attacker = ball ? ball.lastHitter : null;
     if (ball && ball.bomb) { detonateBomb(ball, attacker); return; }
     hitChar(target, attacker);
   }
@@ -342,9 +379,20 @@
     target.dizzyUntil = now + 900;
     state.fx.shockwave(target.x, target.y, "#ffffff");
 
+    // Getting hit costs the player points (every hit taken, fatal or not).
+    // Scale the penalty by difficulty and show the actual amount lost.
+    if (target.isPlayer) {
+      const pen = Math.round(C.SCORE.HIT_TAKEN * (state.diff.score || 1));
+      state.score = Math.max(0, state.score - pen);
+      UI.toast("-" + pen, 800, "penalty");
+    }
+
     if (state.mode === "lives") {
       target.lives--;
       if (target.lives <= 0) { eliminate(target, attacker); return; }
+      // Non-fatal hit landed by the player on a rival: award chip-damage points
+      // (knockouts are scored separately in creditCombo).
+      if (attacker && attacker.isPlayer && !target.isPlayer) addScore(C.SCORE.HIT);
       state.shake = C.SHAKE_HIT;
       state.hitStop = Math.max(state.hitStop, C.HITSTOP_HIT);
     } else {
@@ -384,6 +432,10 @@
     if (now - state.combo.time < C.COMBO_WINDOW) state.combo.count++;
     else state.combo.count = 1;
     state.combo.time = now;
+    state.kos++;
+    // KO points escalate with the combo level (1st KO = base, each chained
+    // KO within the window is worth COMBO_STEP more).
+    addScore(C.SCORE.KO + (state.combo.count - 1) * C.SCORE.COMBO_STEP);
     if (state.combo.count >= 2) {
       UI.toast(state.combo.count + "x COMBO!", 1000, "power");
       AUDIO.combo(state.combo.count);
@@ -397,25 +449,28 @@
     if (!playerAlive) {
       // Run over.
       state.phase = "over";
+      const prevBest = state.startBest || { score: 0, round: 0 };
       recordBest();
+      const isNewBest = state.score > (prevBest.score || 0);
       AUDIO.stopMusic();
       UI.setHudVisible(false);
       setTimeout(() => {
         AUDIO.gameOver();
-        UI.showGameOver(state.round, state.best);
+        UI.showGameOver(state.round, state.score, state.kos, getBest(), isNewBest);
       }, 900);
       return;
     }
     if (alive.length <= 1) {
       // Player is last standing -> round clear.
       state.phase = "roundclear";
+      addScore(C.SCORE.ROUND_CLEAR * state.round);  // survival bonus grows each round
       recordBest();
       const nextRound = state.round + 1;
       const newPowers = state.powerups.newlyUnlockedAt(nextRound);
       AUDIO.stopMusic();
       AUDIO.roundClear();
       UI.setHudVisible(false);
-      setTimeout(() => UI.showRoundClear(nextRound, newPowers), 700);
+      setTimeout(() => UI.showRoundClear(nextRound, newPowers, state.score), 700);
     }
   }
 
@@ -487,7 +542,7 @@
         // Ball size (giant power-up)
         b.r = b.giant ? b.baseR * C.BALL_GIANT_SCALE : b.baseR;
         const events = ENT.stepBall(b, state.chars, state.oct, floor, lb, magnetHolders, state.fx, AUDIO);
-        for (const ev of events) applyDamage(ev.target, b);
+        for (const ev of events) applyDamage(ev.target, b, ev.attacker);
       }
       manageBalls();
 
@@ -620,8 +675,24 @@
       localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign(cur, patch)));
     } catch (e) { /* ignore */ }
   }
+  // Bests are tracked per mode+difficulty so every configuration has its own
+  // target. Each entry stores the best score and the furthest round reached.
+  function currentKey() { return state.mode + ":" + state.difficulty; }
+  function getBest(key) {
+    const bests = loadStore().bests || {};
+    return bests[key || currentKey()] || { score: 0, round: 0 };
+  }
   function recordBest() {
-    if (state.round > state.best) { state.best = state.round; saveStore({ best: state.best }); }
+    const key = currentKey();
+    const store = loadStore();
+    const bests = store.bests || {};
+    const cur = bests[key] || { score: 0, round: 0 };
+    bests[key] = {
+      score: Math.max(cur.score || 0, state.score),
+      round: Math.max(cur.round || 0, state.round),
+    };
+    saveStore({ bests });
+    state.best = bests[key].round;  // kept for any legacy references
   }
 
   // ------------------------------------------------------------
@@ -689,8 +760,12 @@
   // Boot
   // ------------------------------------------------------------
   const saved = loadStore();
+  // Migrate a legacy single "best" round into the per-config store once.
+  if (typeof saved.best === "number" && !saved.bests) {
+    saveStore({ bests: { "lives:normal": { score: 0, round: saved.best } } });
+  }
   state.best = saved.best || 0;
-  UI.showBest(state.best);
+  UI.setBests((loadStore().bests) || {});
   // Apply saved audio prefs to the volume slider / mute (applied to the
   // AudioContext once it's created on first Start).
   if (typeof saved.vol === "number") UI.setVolumeSlider(saved.vol);

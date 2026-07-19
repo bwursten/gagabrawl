@@ -75,6 +75,7 @@
     <div id="screen-round" class="screen hidden">
       <div class="panel small">
         <h1 class="burst">ROUND CLEAR!</h1>
+        <p id="round-score" class="score-line"></p>
         <p id="round-next" class="tagline"></p>
         <p id="round-newpower" class="newpower hidden"></p>
         <button id="btn-next" class="big-btn">NEXT ROUND</button>
@@ -86,6 +87,7 @@
       <div class="panel small">
         <h1 class="logo gameover">GAME OVER</h1>
         <p id="over-result" class="tagline"></p>
+        <div id="over-score" class="over-score"></div>
         <p id="over-best" class="hint"></p>
         <button id="btn-again" class="big-btn">PLAY AGAIN</button>
       </div>
@@ -95,10 +97,15 @@
     <div id="hud" class="hud hidden">
       <div class="hud-left">
         <div class="hud-round">ROUND <span id="hud-round-num">1</span></div>
+        <div id="hud-score" class="hud-score">0</div>
         <div id="hud-lives" class="hud-lives"></div>
         <div id="hud-alive" class="hud-alive"></div>
       </div>
       <div id="hud-powers" class="hud-powers"></div>
+      <div id="hud-combo" class="hud-combo hidden">
+        <span class="hc-count"></span>
+        <span class="hc-bar"><span class="hc-fill"></span></span>
+      </div>
     </div>
 
     <!-- ================= PAUSE OVERLAY ================= -->

@@ -10,7 +10,9 @@
     // ---- World / pit ----
     // Logical world is a square. Rendering scales this to the canvas.
     WORLD: 1000,
-    PIT_MARGIN: 90,          // gap between world edge and pit wall
+    PIT_MARGIN: 90,          // gap between world edge and pit wall (desktop)
+    PIT_MARGIN_MOBILE: 24,   // slim gap on phones so the pit fills more width
+    WORLD_ASPECT_MAX: 1.85,  // tallest the mobile world may stretch (height / width)
     WALL_THICKNESS: 26,
     TILT: 0.90,              // vertical squash to fake an angled top-down view (1 = flat top-down)
 
@@ -91,9 +93,21 @@
     // ---- Difficulty (multipliers applied to AI speed/aggression, launch pace,
     // and power-up frequency). Selected on the title screen. ----
     DIFFICULTIES: {
-      easy:   { label: "Easy",   aiSpeed: 0.82, aiAggro: 0.7, launch: 0.85, powerEvery: 0.8 },
-      normal: { label: "Normal", aiSpeed: 1.0,  aiAggro: 1.0, launch: 1.0,  powerEvery: 1.0 },
-      hard:   { label: "Hard",   aiSpeed: 1.18, aiAggro: 1.3, launch: 1.18, powerEvery: 1.15 },
+      easy:   { label: "Easy",   aiSpeed: 0.82, aiAggro: 0.7, launch: 0.85, powerEvery: 0.8,  score: 0.8 },
+      normal: { label: "Normal", aiSpeed: 1.0,  aiAggro: 1.0, launch: 1.0,  powerEvery: 1.0,  score: 1.0 },
+      hard:   { label: "Hard",   aiSpeed: 1.18, aiAggro: 1.3, launch: 1.18, powerEvery: 1.15, score: 1.4 },
+    },
+
+    // ---- Scoring ----
+    // Run score rewards knocking rivals out (scaled by the live combo) and
+    // surviving rounds; the whole award is then scaled by the difficulty's
+    // `score` multiplier so harder runs are worth more.
+    SCORE: {
+      HIT: 25,          // points for landing a non-fatal hit on a rival (lives mode)
+      KO: 100,          // base points for a rival knockout
+      COMBO_STEP: 50,   // extra points per additional combo level
+      ROUND_CLEAR: 150, // per-round-survived bonus, multiplied by the round number
+      HIT_TAKEN: 40,    // points LOST when the player gets hit (score floors at 0)
     },
 
     // ---- Neon-arcade theme ----

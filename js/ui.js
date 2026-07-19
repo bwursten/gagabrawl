@@ -13,6 +13,7 @@
     selectedChar: 0,
     selectedMode: "lives",
     selectedDifficulty: "normal",
+    bests: {},
 
     init(handlers) {
       this.handlers = handlers;
@@ -35,6 +36,7 @@
           document.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("selected"));
           btn.classList.add("selected");
           this.selectedMode = btn.dataset.mode;
+          this.refreshBestLine();
         });
       });
 
@@ -44,6 +46,7 @@
           document.querySelectorAll(".diff-btn").forEach((b) => b.classList.remove("selected"));
           btn.classList.add("selected");
           this.selectedDifficulty = btn.dataset.diff;
+          this.refreshBestLine();
         });
       });
 
@@ -104,9 +107,23 @@
     },
 
     // ---- best score / settings display ----
-    showBest(n) {
+    // Bests are keyed by "mode:difficulty"; the title line shows the record
+    // for whatever configuration is currently selected.
+    setBests(bests) {
+      this.bests = bests || {};
+      this.refreshBestLine();
+    },
+    refreshBestLine() {
       const e = el("best-line");
-      if (e) e.textContent = n > 0 ? "Best: Round " + n : "";
+      if (!e) return;
+      const rec = this.bests[this.selectedMode + ":" + this.selectedDifficulty];
+      if (rec && rec.score) {
+        e.textContent = `Best: ${rec.score.toLocaleString()} pts · Round ${rec.round}`;
+      } else if (rec && rec.round) {
+        e.textContent = `Best: Round ${rec.round}`;
+      } else {
+        e.textContent = "";
+      }
     },
     setVolumeSlider(v) {
       const e = el("vol");
@@ -138,6 +155,24 @@
     // ---- HUD ----
     updateHud(state) {
       el("hud-round-num").textContent = state.round;
+      const scoreEl = el("hud-score");
+      if (scoreEl) scoreEl.textContent = (state.score || 0).toLocaleString();
+
+      // Live combo meter: appears while a knockout chain (2+) is still within
+      // its window, with a bar that drains as the window runs out.
+      const comboEl = el("hud-combo");
+      if (comboEl) {
+        const remain = C.COMBO_WINDOW - (performance.now() - state.combo.time);
+        if (state.combo.count >= 2 && remain > 0) {
+          comboEl.classList.remove("hidden");
+          comboEl.querySelector(".hc-count").textContent = state.combo.count + "x COMBO";
+          comboEl.querySelector(".hc-fill").style.width =
+            Math.max(0, Math.min(100, (remain / C.COMBO_WINDOW) * 100)) + "%";
+        } else {
+          comboEl.classList.add("hidden");
+        }
+      }
+
       const player = state.player;
       const livesEl = el("hud-lives");
       if (state.mode === "lives" && player.alive) {
@@ -186,6 +221,7 @@
       t.textContent = text;
       t.classList.remove("hidden");
       t.classList.toggle("toast-power", variant === "power");
+      t.classList.toggle("toast-penalty", variant === "penalty");
       // retrigger animation
       t.style.animation = "none"; void t.offsetWidth; t.style.animation = "";
       clearTimeout(this._toastTimer);
@@ -194,7 +230,9 @@
     hideToast() { el("toast").classList.add("hidden"); },
 
     // ---- round clear screen ----
-    showRoundClear(nextRound, newPowers) {
+    showRoundClear(nextRound, newPowers, score) {
+      const rs = el("round-score");
+      if (rs) rs.textContent = `${(score || 0).toLocaleString()} pts`;
       el("round-next").textContent = `Get ready for Round ${nextRound}!`;
       const np = el("round-newpower");
       if (newPowers && newPowers.length) {
@@ -208,9 +246,17 @@
     },
 
     // ---- game over ----
-    showGameOver(round, best) {
-      el("over-result").textContent = `You reached Round ${round}.`;
-      el("over-best").textContent = best ? `Best so far: Round ${best}` : "";
+    showGameOver(round, score, kos, best, isNewBest) {
+      const koLine = kos === 1 ? "1 knockout" : `${kos} knockouts`;
+      el("over-result").textContent = `Round ${round} · ${koLine}`;
+      el("over-score").innerHTML =
+        `<span class="os-num">${(score || 0).toLocaleString()}</span>` +
+        `<span class="os-label">POINTS</span>` +
+        (isNewBest ? `<span class="os-new">★ NEW BEST!</span>` : "");
+      el("over-best").textContent =
+        best && best.score ? `Best: ${best.score.toLocaleString()} pts · Round ${best.round}` : "";
+      // Refresh the title-screen record so it reflects this run next time.
+      if (best) { this.bests[this.selectedMode + ":" + this.selectedDifficulty] = best; }
       this.showScreen("screen-over");
     },
 

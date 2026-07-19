@@ -182,6 +182,10 @@
         //  - this character isn't the one who just launched it (grace window)
         const isBatter = ball.lastHitter === ch && (now - ball.lastHitTime) < C.HIT_GRACE_MS;
         const damaging = incomingSpeed >= C.HIT_SPEED && !isBatter;
+        // Whoever last batted the ball is the attacker for this hit. Capture it
+        // now, because we're about to reassign lastHitter to this character (ch)
+        // as they bat it away — otherwise the attacker credit is lost.
+        const attacker = ball.lastHitter;
 
         // Reflect ball off the character
         const ref = GEO.reflect(ball.vx, ball.vy, nx, ny, 1.0);
@@ -214,7 +218,7 @@
         }
 
         if (damaging) {
-          events.push({ target: ch });
+          events.push({ target: ch, attacker });
         }
       }
     }

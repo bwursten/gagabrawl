@@ -19,13 +19,16 @@
   // Fit-and-center the world into a canvas of any aspect ratio: the pit is
   // centered and scaled to fit both dimensions (letterboxing with arena
   // background). Works for square (desktop) and tall (mobile) canvases alike.
-  function fitScale(W, H) {
-    return Math.min(W / C.WORLD, H / (C.WORLD * C.TILT));
+  function fitScale(W, H, worldW, worldH) {
+    worldW = worldW || C.WORLD;
+    worldH = worldH || C.WORLD;
+    return Math.min(W / worldW, H / (worldH * C.TILT));
   }
-  function makeToScreen(scale, W, H) {
-    const half = C.WORLD / 2;
+  function makeToScreen(scale, W, H, worldW, worldH) {
+    const halfX = (worldW || C.WORLD) / 2;
+    const halfY = (worldH || C.WORLD) / 2;
     return function (x, y) {
-      return { x: W / 2 + (x - half) * scale, y: H / 2 + (y - half) * C.TILT * scale };
+      return { x: W / 2 + (x - halfX) * scale, y: H / 2 + (y - halfY) * C.TILT * scale };
     };
   }
 
@@ -52,11 +55,11 @@
   // ---------------- Pre-rendered arena cache ----------------
   let arena = { key: "", base: null, vignette: null };
 
-  function getArena(w, h, scale, theme, oct) {
-    const key = w + "x" + h + ":" + theme.name;
+  function getArena(w, h, scale, theme, oct, world) {
+    const key = w + "x" + h + ":" + theme.name + ":" + Math.round((world && world.h) || C.WORLD);
     if (arena.key === key && arena.base) return arena;
     arena.key = key;
-    arena.base = buildArenaBase(w, h, scale, theme, oct);
+    arena.base = buildArenaBase(w, h, scale, theme, oct, world);
     arena.vignette = buildVignette(w, h);
     return arena;
   }
@@ -67,11 +70,15 @@
     return cv;
   }
 
-  function buildArenaBase(w, h, scale, theme, oct) {
+  function buildArenaBase(w, h, scale, theme, oct, world) {
     const cv = newCanvas(w, h);
     const ctx = cv.getContext("2d");
-    const toScreen = makeToScreen(scale, w, h);
+    const toScreen = makeToScreen(scale, w, h, world && world.w, world && world.h);
     const c = toScreen(oct.cx, oct.cy);
+    // Elongated pits have distinct horizontal/vertical radii; fall back to R.
+    const Rx = oct.Rx || oct.R;
+    const Ry = oct.Ry || oct.R;
+    const RR = Math.max(Rx, Ry);
 
     // Background gradient + corner glow blobs
     const bg = ctx.createLinearGradient(0, 0, 0, h);
@@ -84,11 +91,11 @@
     ctx.save();
     tracePoly(ctx, oct.verts, toScreen);
     ctx.clip();
-    const fg = ctx.createLinearGradient(0, c.y - oct.R * scale, 0, c.y + oct.R * scale);
+    const fg = ctx.createLinearGradient(0, c.y - Ry * scale, 0, c.y + Ry * scale);
     fg.addColorStop(0, C.FLOOR_TOP); fg.addColorStop(1, C.FLOOR_BOTTOM);
     ctx.fillStyle = fg; ctx.fillRect(0, 0, w, h);
 
-    const cg = ctx.createRadialGradient(c.x, c.y, 10, c.x, c.y, oct.R * scale);
+    const cg = ctx.createRadialGradient(c.x, c.y, 10, c.x, c.y, RR * scale);
     cg.addColorStop(0, hexA(theme.glow, 0.85)); cg.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = cg; ctx.fillRect(0, 0, w, h);
 
@@ -97,11 +104,11 @@
     ctx.lineWidth = 1.5 * scale;
     const step = 78;
     ctx.beginPath();
-    for (let wx = oct.cx - oct.R; wx <= oct.cx + oct.R; wx += step) {
-      const sx = wx * scale; ctx.moveTo(sx, 0); ctx.lineTo(sx, h);
+    for (let wx = oct.cx - Rx; wx <= oct.cx + Rx; wx += step) {
+      const sx = toScreen(wx, oct.cy).x; ctx.moveTo(sx, 0); ctx.lineTo(sx, h);
     }
-    for (let wy = oct.cy - oct.R; wy <= oct.cy + oct.R; wy += step) {
-      const sy = toScreen(0, wy).y; ctx.moveTo(0, sy); ctx.lineTo(w, sy);
+    for (let wy = oct.cy - Ry; wy <= oct.cy + Ry; wy += step) {
+      const sy = toScreen(oct.cx, wy).y; ctx.moveTo(0, sy); ctx.lineTo(w, sy);
     }
     ctx.stroke();
 
@@ -148,12 +155,13 @@
   function draw(ctx, state) {
     const canvas = ctx.canvas;
     const W = canvas.width, H = canvas.height;
-    const scale = fitScale(W, H);
-    const toScreen = makeToScreen(scale, W, H);
+    const world = state.world || { w: C.WORLD, h: C.WORLD };
+    const scale = fitScale(W, H, world.w, world.h);
+    const toScreen = makeToScreen(scale, W, H, world.w, world.h);
     state.toScreen = toScreen;
     state.scale = scale;
     const theme = themeForRound(state.round);
-    const A = getArena(W, H, scale, theme, state.oct);
+    const A = getArena(W, H, scale, theme, state.oct, world);
 
     // Cover the whole canvas first so screen-shake never reveals gaps.
     ctx.fillStyle = C.BG_BOTTOM;

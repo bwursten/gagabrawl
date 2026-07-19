@@ -88,7 +88,7 @@ html, body {
   backdrop-filter: blur(2px);
   z-index: 20;
 }
-.screen.hidden, .hud.hidden, .toast.hidden, .newpower.hidden, .tabpage.hidden { display: none; }
+.screen.hidden, .hud.hidden, .toast.hidden, .newpower.hidden, .tabpage.hidden, .hud-combo.hidden { display: none; }
 
 .panel {
   width: min(92%, 560px);
@@ -355,6 +355,96 @@ html, body {
 }
 .power-chip .pc-fill { height: 100%; background: var(--accent2); width: 100%; }
 
+/* Live run score, tucked under the round pill. */
+.hud-score {
+  margin-top: 6px;
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: clamp(15px, 3.6vw, 20px);
+  letter-spacing: 1px;
+  color: var(--good);
+  background: rgba(5, 6, 20, 0.6);
+  padding: 3px 10px;
+  border-radius: 10px;
+  text-shadow: 0 0 8px rgba(141, 255, 58, 0.6);
+}
+
+/* Combo meter — centered near the top, only visible mid-chain. */
+.hud-combo {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  animation: comboPop 0.25s ease-out;
+}
+.hud-combo .hc-count {
+  font-family: var(--font-display);
+  font-size: clamp(18px, 5vw, 30px);
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent), 2px 2px 0 var(--ink);
+}
+.hud-combo .hc-bar {
+  width: clamp(90px, 26vw, 150px);
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+}
+.hud-combo .hc-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+@keyframes comboPop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+
+/* Running score on the round-clear screen. */
+.score-line {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 5vw, 30px);
+  letter-spacing: 1px;
+  color: var(--good);
+  text-shadow: 0 0 10px rgba(141, 255, 58, 0.5);
+  margin: 2px 0 4px;
+}
+
+/* Big final score on the game-over screen. */
+.over-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 0 10px;
+}
+.over-score .os-num {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 12vw, 68px);
+  line-height: 1;
+  color: var(--good);
+  text-shadow: 0 0 18px rgba(141, 255, 58, 0.6), 3px 3px 0 var(--ink);
+}
+.over-score .os-label {
+  font-family: var(--font-display);
+  font-size: clamp(12px, 3vw, 15px);
+  letter-spacing: 4px;
+  color: var(--text-dim);
+}
+.over-score .os-new {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: clamp(15px, 4vw, 20px);
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent);
+  animation: pop 0.4s ease-out;
+}
+
 /* ---------------- Audio control ---------------- */
 .audio-ctrl {
   position: absolute;
@@ -391,4 +481,12 @@ html, body {
   font-size: clamp(18px, 5vw, 34px);
   color: var(--accent2);
   text-shadow: 0 0 12px var(--accent2), 2px 2px 0 var(--ink);
+}
+
+/* Small red toast for the points penalty when the player gets hit. */
+.toast.toast-penalty {
+  top: 32%;
+  font-size: clamp(20px, 6vw, 40px);
+  color: #ff5468;
+  text-shadow: 0 0 12px rgba(255, 84, 104, 0.8), 2px 2px 0 var(--ink);
 }

@@ -9,15 +9,23 @@
   // Build a regular octagon centered in the world, as a list of vertices
   // and a list of edges each with an inward-pointing "wall" definition:
   //   { nx, ny, d }  where a point p is inside that edge when p.x*nx + p.y*ny <= d.
-  function buildOctagon() {
-    const cx = C.WORLD / 2;
-    const cy = C.WORLD / 2;
-    const R = C.WORLD / 2 - C.PIT_MARGIN;
+  // worldW/worldH default to a square C.WORLD world; passing a taller worldH
+  // (mobile portrait) yields a vertically elongated octagon with independent
+  // horizontal (Rx) and vertical (Ry) radii. All edge math below is generic,
+  // so the physics work unchanged for a stretched pit.
+  function buildOctagon(worldW, worldH, margin) {
+    worldW = worldW || C.WORLD;
+    worldH = worldH || C.WORLD;
+    if (margin == null) margin = C.PIT_MARGIN;
+    const cx = worldW / 2;
+    const cy = worldH / 2;
+    const Rx = worldW / 2 - margin;
+    const Ry = worldH / 2 - margin;
     const verts = [];
     // Flat-top-ish octagon: start offset so edges are horizontal/vertical/diagonal
     for (let i = 0; i < 8; i++) {
       const a = (Math.PI / 4) * i + Math.PI / 8;
-      verts.push({ x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) });
+      verts.push({ x: cx + Rx * Math.cos(a), y: cy + Ry * Math.sin(a) });
     }
     const edges = [];
     for (let i = 0; i < 8; i++) {
@@ -39,7 +47,9 @@
       const d = nx * a.x + ny * a.y; // wall offset along outward normal
       edges.push({ nx, ny, d });
     }
-    return { cx, cy, R, verts, edges };
+    // R kept for callers that want a single "safe" radius (spawn rings, etc.).
+    const R = Math.min(Rx, Ry);
+    return { cx, cy, R, Rx, Ry, verts, edges };
   }
 
   // Push a circle of given radius back inside the octagon.
@@ -74,8 +84,8 @@
   // Random point comfortably inside the octagon (used for spawns).
   function randomInside(oct, pad) {
     for (let i = 0; i < 40; i++) {
-      const x = C.WORLD / 2 + GEO.rand(-oct.R, oct.R);
-      const y = C.WORLD / 2 + GEO.rand(-oct.R, oct.R);
+      const x = oct.cx + GEO.rand(-oct.Rx, oct.Rx);
+      const y = oct.cy + GEO.rand(-oct.Ry, oct.Ry);
       const c = clampCircleInside(oct, x, y, pad);
       if (Math.abs(c.x - x) < 0.5 && Math.abs(c.y - y) < 0.5) return { x, y };
     }
