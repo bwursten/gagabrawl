@@ -256,11 +256,11 @@
         }
       }
 
-      let livesStr;
+      // Hearts only in 3-Lives mode. 1-Hit mode shows nothing here (the old
+      // "1-Hit" text was unreadable dark-on-dark and just clutter).
+      let livesStr = "";
       if (state.mode === "lives" && player.alive) {
         livesStr = "❤️".repeat(player.lives) + "🖤".repeat(Math.max(0, C.LIVES - player.lives));
-      } else {
-        livesStr = state.mode === "oneHit" ? "☝️ 1-Hit" : "";
       }
       if (h.lives && livesStr !== this._lastLives) { h.lives.textContent = livesStr; this._lastLives = livesStr; }
 

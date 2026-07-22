@@ -259,7 +259,9 @@
         ai.isBoss = true;
         ai.r = C.CHAR_RADIUS * C.BOSS.sizeMult;
         ai.aiSpeed = aiSpeed * C.BOSS.speedMult;
-        if (state.mode === "lives") ai.lives = C.LIVES + C.BOSS.extraLives;
+        // Extra hit points in both modes: base is 3 lives in Lives mode, 1 in
+        // 1-Hit mode, plus the boss bonus — so the champion always soaks extra.
+        ai.lives = (state.mode === "lives" ? C.LIVES : 1) + C.BOSS.extraLives;
         ai.name = "Champion";
       }
       state.chars.push(ai);
@@ -395,23 +397,29 @@
     target.dizzyUntil = now + 900;
     state.fx.shockwave(target.x, target.y, "#ffffff");
 
-    // Getting hit costs the player points (every hit taken, fatal or not).
-    // Scale the penalty by difficulty and show the actual amount lost.
-    if (target.isPlayer) {
-      const pen = Math.round(C.SCORE.HIT_TAKEN * (state.diff.score || 1));
-      state.score = Math.max(0, state.score - pen);
-      UI.toast("-" + pen, 800, "penalty");
-    }
-
     if (state.mode === "lives") {
       target.lives--;
       if (target.lives <= 0) { eliminate(target, attacker); return; }
-      // Non-fatal hit landed by the player on a rival: award chip-damage points
-      // (knockouts are scored separately in creditCombo).
-      if (attacker && attacker.isPlayer && !target.isPlayer) addScore(C.SCORE.HIT);
+      // Survived a hit: the player loses points; a rival chipped by the player scores.
+      if (target.isPlayer) {
+        const pen = Math.round(C.SCORE.HIT_TAKEN * (state.diff.score || 1));
+        state.score = Math.max(0, state.score - pen);
+        UI.toast("-" + pen, 800, "penalty");
+      } else if (attacker && attacker.isPlayer) {
+        addScore(C.SCORE.HIT);
+      }
       state.shake = C.SHAKE_HIT;
       state.hitStop = Math.max(state.hitStop, C.HITSTOP_HIT);
     } else {
+      // 1-Hit (Classic): any solid contact is an instant out — except the boss,
+      // who can soak a few hits so champion rounds still feel special.
+      if (target.isBoss && target.lives > 1) {
+        target.lives--;
+        if (attacker && attacker.isPlayer) addScore(C.SCORE.HIT);
+        state.shake = C.SHAKE_HIT;
+        state.hitStop = Math.max(state.hitStop, C.HITSTOP_HIT);
+        return;
+      }
       eliminate(target, attacker);
     }
   }
