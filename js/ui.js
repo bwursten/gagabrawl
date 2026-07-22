@@ -68,19 +68,84 @@
     buildCharPicker() {
       const wrap = el("char-picker");
       wrap.innerHTML = "";
+      const RES = 128;   // fixed backing resolution; CSS scales each face so all fit one row
+      this._portraits = [];
+      // Track the cursor/finger in client coords so the eyes can follow it.
+      if (!this._cursorHooked) {
+        this._cursor = { x: -1e5, y: -1e5 };
+        const track = (x, y) => { this._cursor.x = x; this._cursor.y = y; };
+        window.addEventListener("mousemove", (e) => track(e.clientX, e.clientY));
+        window.addEventListener("touchmove", (e) => {
+          if (e.touches[0]) track(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: true });
+        this._cursorHooked = true;
+      }
+
       C.CHARACTERS.forEach((ch, i) => {
         const sw = document.createElement("div");
         sw.className = "char-swatch" + (i === 0 ? " selected" : "");
-        sw.style.background = ch.fill;
-        sw.style.borderColor = i === 0 ? "#1b2440" : "rgba(27,36,64,0.25)";
         sw.title = ch.name;
+
+        const cv = document.createElement("canvas");
+        cv.className = "swatch-face";
+        cv.width = RES; cv.height = RES;
+
+        sw.appendChild(cv);
         sw.addEventListener("click", () => {
           this.selectedChar = i;
           document.querySelectorAll(".char-swatch").forEach((s) => s.classList.remove("selected"));
           sw.classList.add("selected");
         });
         wrap.appendChild(sw);
+
+        this._portraits.push({
+          canvas: cv, ctx: cv.getContext("2d"), color: ch.color || ch,
+          size: RES, bob: Math.random() * Math.PI * 2,
+          pupilX: 0, pupilY: 0, blinkT: 0, blinkAt: performance.now() + 800 + Math.random() * 3000,
+        });
       });
+    },
+
+    // Animate the picker faces (bob + blink + cursor-following eyes) only while
+    // the start screen is visible, so it costs nothing during gameplay.
+    startPortraits() {
+      if (this._portraitRAF || !this._portraits || !window.RENDER || !window.RENDER.portrait) return;
+      const loop = () => {
+        this._portraitRAF = requestAnimationFrame(loop);
+        this.drawPortraits();
+      };
+      this._portraitRAF = requestAnimationFrame(loop);
+    },
+    stopPortraits() {
+      if (this._portraitRAF) { cancelAnimationFrame(this._portraitRAF); this._portraitRAF = 0; }
+    },
+    drawPortraits() {
+      const now = performance.now();
+      const cur = this._cursor || { x: -1e5, y: -1e5 };
+      for (const p of this._portraits) {
+        const g = p.ctx, size = p.size;
+        // Eye target: unit direction from this face's center toward the cursor.
+        const rect = p.canvas.getBoundingClientRect();
+        const dx = cur.x - (rect.left + rect.width / 2);
+        const dy = cur.y - (rect.top + rect.height / 2);
+        const d = Math.hypot(dx, dy) || 1;
+        const tx = d > 2 ? dx / d : 0, ty = d > 2 ? dy / d : 0;
+        p.pupilX += (tx - p.pupilX) * 0.2;
+        p.pupilY += (ty - p.pupilY) * 0.2;
+        // Blink timer.
+        if (p.blinkT > 0) p.blinkT--;
+        else if (now > p.blinkAt) { p.blinkT = 6; p.blinkAt = now + 1500 + Math.random() * 3500; }
+        // Gentle idle bob.
+        p.bob += 0.06;
+        const bobY = Math.sin(p.bob) * size * 0.03;
+
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.clearRect(0, 0, size, size);
+        g.translate(size / 2, size / 2 + bobY);
+        window.RENDER.portrait(g, p.color, size * 0.4, {
+          pupilX: p.pupilX, pupilY: p.pupilY, blink: p.blinkT > 0,
+        });
+      }
     },
 
     // Start-screen power-up key: icon + name + what it does.
@@ -142,6 +207,9 @@
     showScreen(which) {
       ["screen-start", "screen-round", "screen-over"].forEach((s) => this.hide(s));
       if (which) this.show(which);
+      // Only animate the picker faces while the title screen is on view.
+      if (which === "screen-start") this.startPortraits();
+      else this.stopPortraits();
     },
 
     setHudVisible(v) {

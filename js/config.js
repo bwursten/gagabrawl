@@ -148,18 +148,21 @@
   };
 
   // Character color presets (rim + fill + a friendly face accent)
+  // Each brawler has a `face` recipe that gives it a distinct personality:
+  //   brow:   none | angry | flat | arched | raised | worry
+  //   eyes:   normal | wide | sleepy | narrow | sparkle | soft
+  //   mouth:  smile | grin | smirk | open | tongue | small | flat
+  //   blush / freckles: booleans
   CONFIG.CHARACTERS = [
-    { id: "tomato",   name: "Tomato",   fill: "#ff5d73", rim: "#c62f45" },
-    { id: "tangerine",name: "Tangerine",fill: "#ff9d3f", rim: "#cc6d10" },
-    { id: "sunny",    name: "Sunny",    fill: "#ffcf3f", rim: "#c99a00" },
-    { id: "lime",     name: "Lime",     fill: "#5fd86b", rim: "#2f9e3a" },
-    { id: "sky",      name: "Sky",      fill: "#4dc3ff", rim: "#1f8fd1" },
-    { id: "grape",    name: "Grape",    fill: "#a97bff", rim: "#7346d6" },
-    { id: "bubble",   name: "Bubble",   fill: "#ff8fd0", rim: "#d martin" },
-    { id: "mint",     name: "Mint",     fill: "#57e8c9", rim: "#1fae91" },
+    { id: "blaze",   name: "Blaze",   fill: "#ff5d73", rim: "#c62f45", face: { brow: "angry",  eyes: "normal",  mouth: "grin"  } },
+    { id: "ember",   name: "Ember",   fill: "#ff9d3f", rim: "#cc6d10", face: { brow: "none",   eyes: "wide",    mouth: "tongue" } },
+    { id: "lantern", name: "Lantern", fill: "#ffcf3f", rim: "#c99a00", face: { brow: "none",   eyes: "sparkle", mouth: "grin",  freckles: true } },
+    { id: "fern",    name: "Fern",    fill: "#5fd86b", rim: "#2f9e3a", face: { brow: "flat",   eyes: "sleepy",  mouth: "smirk" } },
+    { id: "river",   name: "River",   fill: "#4dc3ff", rim: "#1f8fd1", face: { brow: "raised",  eyes: "normal",  mouth: "smirk" } },
+    { id: "dusk",    name: "Dusk",    fill: "#a97bff", rim: "#7346d6", face: { brow: "arched",  eyes: "narrow",  mouth: "smirk" } },
+    { id: "dawn",    name: "Dawn",    fill: "#ff8fd0", rim: "#d64fa0", face: { brow: "none",   eyes: "soft",    mouth: "small", blush: true } },
+    { id: "spruce",  name: "Spruce",  fill: "#57e8c9", rim: "#1fae91", face: { brow: "flat",   eyes: "normal",  mouth: "flat"  } },
   ];
-  // fix a typo above safely
-  CONFIG.CHARACTERS[6].rim = "#d64fa0";
 
   // AI-only palette (player's chosen color is removed from this at runtime)
   CONFIG.AI_COLORS = CONFIG.CHARACTERS.slice();

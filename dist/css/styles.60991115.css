@@ -144,18 +144,21 @@ html, body {
 }
 
 /* ---------------- Character picker ---------------- */
-.char-picker { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.char-picker { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: center; }
 .char-swatch {
-  width: 54px; height: 54px;
-  border-radius: 50%;
-  border: 4px solid rgba(27, 36, 64, 0.25);
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 60px;
   cursor: pointer;
-  position: relative;
-  transition: transform 0.1s;
+  border-radius: 50%;
+  transition: transform 0.1s, box-shadow 0.15s;
 }
 .char-swatch:hover { transform: scale(1.08); }
-.char-swatch { border-color: rgba(255, 255, 255, 0.2); }
-.char-swatch.selected { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 0 3px var(--accent2), 0 0 16px var(--accent2); }
+.char-swatch.selected {
+  box-shadow: 0 0 0 3px var(--accent2), 0 0 14px var(--accent2);
+  transform: scale(1.05);
+}
+.swatch-face { display: block; width: 100%; height: auto; }
 
 /* ---------------- Difficulty picker ---------------- */
 .diff-picker { display: flex; gap: 8px; }

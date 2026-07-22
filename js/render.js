@@ -608,17 +608,14 @@
     ctx.restore();
   }
 
+  // Arena face: resolve the brawler's ball-tracking eyes, blink and mood, then
+  // paint its personalized face (recipe lives on the character's color entry).
   function drawFace(ctx, ch, ball, r, now) {
-    const eyeY = -r * 0.12;
-    const eyeDX = r * 0.34;
-    const eyeR = r * 0.17;
-
     let tx = 0, ty = 0;
     if (ball) {
       const dx = ball.x - ch.x, dy = (ball.y - ch.y) * TILT;
       const d = Math.hypot(dx, dy) || 1;
-      tx = (dx / d) * eyeR * 0.5;
-      ty = (dy / d) * eyeR * 0.5;
+      tx = dx / d; ty = dy / d;                 // unit direction; paintFace scales it
     }
     ch.pupilX += (tx - ch.pupilX) * 0.2;
     ch.pupilY += (ty - ch.pupilY) * 0.2;
@@ -626,47 +623,139 @@
     if (ch.blinkT > 0) ch.blinkT--;
     else if (now > ch.blinkAt) { ch.blinkT = 6; ch.blinkAt = now + 1200 + Math.random() * 3500; }
 
-    const dizzy = now < ch.dizzyUntil;
-    const blinking = ch.blinkT > 0;
+    let mood = "calm";
+    if (now < ch.dizzyUntil) mood = "dizzy";
+    else if (ball && ball.speed >= C.HIT_SPEED && Math.hypot(ball.x - ch.x, ball.y - ch.y) < 220) mood = "worried";
 
-    if (dizzy) {
-      ctx.fillStyle = "#12183a";
-      const spin = now / 120;
-      for (const sx of [-eyeDX, eyeDX]) {
-        ctx.save(); ctx.translate(sx, eyeY); ctx.rotate(spin); drawTinyStar(ctx, eyeR * 1.1); ctx.restore();
-      }
-    } else if (blinking) {
-      ctx.strokeStyle = "#12183a";
-      ctx.lineWidth = Math.max(2, r * 0.09);
+    paintFace(ctx, ch.color && ch.color.face, r, {
+      pupilX: ch.pupilX, pupilY: ch.pupilY, blink: ch.blinkT > 0, mood, now,
+    });
+  }
+
+  // Data-driven face. `recipe` = { brow, eyes, mouth, blush, freckles }.
+  // `st` = { pupilX, pupilY (unit -1..1), blink, mood: calm|worried|dizzy, now }.
+  const DARK = "#12183a";
+  function paintFace(ctx, recipe, r, st) {
+    recipe = recipe || {};
+    const eyeY = -r * 0.12, eyeDX = r * 0.34, eyeR = r * 0.17;
+    const px = Math.max(-1, Math.min(1, st.pupilX || 0)) * eyeR * 0.5;
+    const py = Math.max(-1, Math.min(1, st.pupilY || 0)) * eyeR * 0.5;
+    const mood = st.mood || "calm";
+
+    // Eyes
+    if (mood === "dizzy") {
+      ctx.fillStyle = DARK;
+      const spin = (st.now || 0) / 120;
+      for (const sx of [-eyeDX, eyeDX]) { ctx.save(); ctx.translate(sx, eyeY); ctx.rotate(spin); drawTinyStar(ctx, eyeR * 1.1); ctx.restore(); }
+    } else if (st.blink) {
+      ctx.strokeStyle = DARK; ctx.lineWidth = Math.max(2, r * 0.09); ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(-eyeDX - eyeR, eyeY); ctx.lineTo(-eyeDX + eyeR, eyeY);
       ctx.moveTo(eyeDX - eyeR, eyeY); ctx.lineTo(eyeDX + eyeR, eyeY);
       ctx.stroke();
     } else {
-      ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(-eyeDX, eyeY, eyeR, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(eyeDX, eyeY, eyeR, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#12183a";
-      ctx.beginPath(); ctx.arc(-eyeDX + ch.pupilX, eyeY + ch.pupilY, eyeR * 0.55, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(eyeDX + ch.pupilX, eyeY + ch.pupilY, eyeR * 0.55, 0, Math.PI * 2); ctx.fill();
+      drawEye(ctx, -eyeDX, eyeY, eyeR, recipe.eyes, px, py);
+      drawEye(ctx, eyeDX, eyeY, eyeR, recipe.eyes, px, py);
     }
 
-    ctx.strokeStyle = "#12183a";
-    ctx.lineWidth = Math.max(1.5, r * 0.09);
-    let worried = false;
-    if (ball) {
-      const d = Math.hypot(ball.x - ch.x, ball.y - ch.y);
-      worried = ball.speed >= C.HIT_SPEED && d < 220;
+    // Brows (skipped while dizzy)
+    if (mood !== "dizzy" && recipe.brow && recipe.brow !== "none") {
+      drawBrows(ctx, eyeDX, eyeY, eyeR, recipe.brow, r);
     }
-    if (worried || dizzy) {
-      ctx.fillStyle = "#12183a";
-      ctx.beginPath();
-      ctx.ellipse(0, r * 0.34, r * 0.16, r * 0.2, 0, 0, Math.PI * 2);
-      ctx.fill();
+
+    // Mouth
+    if (mood === "worried" || mood === "dizzy") {
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.ellipse(0, r * 0.34, r * 0.16, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
     } else {
-      ctx.beginPath();
-      ctx.arc(0, r * 0.16, r * 0.34, 0.15 * Math.PI, 0.85 * Math.PI);
-      ctx.stroke();
+      drawMouth(ctx, r, recipe.mouth);
+    }
+
+    // Cheek details
+    if (recipe.blush) {
+      ctx.fillStyle = "rgba(255,120,150,0.4)";
+      ctx.beginPath(); ctx.ellipse(-eyeDX - r * 0.04, r * 0.14, r * 0.14, r * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(eyeDX + r * 0.04, r * 0.14, r * 0.14, r * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    if (recipe.freckles) {
+      ctx.fillStyle = "rgba(120,72,40,0.5)";
+      for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) {
+        ctx.beginPath(); ctx.arc(sx * (eyeDX * 0.7 + i * r * 0.12), r * 0.08, r * 0.022, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  function drawEye(ctx, ex, ey, eyeR, style, px, py) {
+    ctx.fillStyle = "#fff";
+    if (style === "wide" || style === "soft") {
+      const R = eyeR * (style === "soft" ? 1.25 : 1.18);
+      ctx.beginPath(); ctx.arc(ex, ey, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.arc(ex + px, ey + py, R * 0.5, 0, Math.PI * 2); ctx.fill();
+      if (style === "soft") { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex + px - R * 0.18, ey + py - R * 0.2, R * 0.16, 0, Math.PI * 2); ctx.fill(); }
+    } else if (style === "sleepy") {
+      ctx.beginPath(); ctx.ellipse(ex, ey, eyeR, eyeR * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.arc(ex + px, ey + eyeR * 0.12 + py * 0.4, eyeR * 0.48, 0, Math.PI * 2); ctx.fill();
+    } else if (style === "narrow") {
+      ctx.beginPath(); ctx.ellipse(ex, ey, eyeR * 1.05, eyeR * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.arc(ex + px, ey + py * 0.4, eyeR * 0.42, 0, Math.PI * 2); ctx.fill();
+    } else if (style === "sparkle") {
+      ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.arc(ex + px, ey + py, eyeR * 0.55, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(ex + px - eyeR * 0.2, ey + py - eyeR * 0.22, eyeR * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex + px + eyeR * 0.22, ey + py + eyeR * 0.18, eyeR * 0.1, 0, Math.PI * 2); ctx.fill();
+    } else { // normal
+      ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.arc(ex + px, ey + py, eyeR * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function drawBrows(ctx, eyeDX, eyeY, eyeR, brow, r) {
+    ctx.strokeStyle = DARK; ctx.lineWidth = Math.max(2, r * 0.07); ctx.lineCap = "round";
+    const by = eyeY - eyeR * 1.45, w = eyeR * 0.95;
+    const seg = (cx, y1, y2) => { ctx.beginPath(); ctx.moveTo(cx - w, y1); ctx.lineTo(cx + w, y2); ctx.stroke(); };
+    if (brow === "angry") {              // inner ends dip toward the nose
+      seg(-eyeDX, by, by + eyeR * 0.5);
+      seg(eyeDX, by + eyeR * 0.5, by);
+    } else if (brow === "worry") {       // inner ends lift up
+      seg(-eyeDX, by + eyeR * 0.45, by - eyeR * 0.1);
+      seg(eyeDX, by - eyeR * 0.1, by + eyeR * 0.45);
+    } else if (brow === "arched") {      // sly, lifted arches
+      const yy = by - eyeR * 0.25;
+      seg(-eyeDX, yy + eyeR * 0.12, yy - eyeR * 0.12);
+      seg(eyeDX, yy - eyeR * 0.12, yy + eyeR * 0.12);
+    } else if (brow === "raised") {      // one cocky raised brow
+      seg(-eyeDX, by, by);
+      ctx.beginPath(); ctx.moveTo(eyeDX - w, by - eyeR * 0.7); ctx.lineTo(eyeDX + w, by - eyeR * 0.5); ctx.stroke();
+    } else {                              // flat
+      seg(-eyeDX, by, by);
+      seg(eyeDX, by, by);
+    }
+  }
+
+  function drawMouth(ctx, r, style) {
+    ctx.strokeStyle = DARK; ctx.fillStyle = DARK; ctx.lineWidth = Math.max(1.5, r * 0.09); ctx.lineCap = "round";
+    if (style === "grin") {
+      ctx.beginPath(); ctx.arc(0, r * 0.12, r * 0.4, 0.12 * Math.PI, 0.88 * Math.PI); ctx.stroke();
+    } else if (style === "smirk") {
+      ctx.beginPath(); ctx.arc(r * 0.1, r * 0.16, r * 0.3, 0.08 * Math.PI, 0.62 * Math.PI); ctx.stroke();
+    } else if (style === "open") {
+      ctx.beginPath(); ctx.ellipse(0, r * 0.28, r * 0.2, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (style === "tongue") {
+      ctx.beginPath(); ctx.arc(0, r * 0.14, r * 0.34, 0.12 * Math.PI, 0.88 * Math.PI); ctx.stroke();
+      ctx.fillStyle = "#ff6b8a";
+      ctx.beginPath(); ctx.ellipse(r * 0.06, r * 0.42, r * 0.12, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (style === "small") {
+      ctx.beginPath(); ctx.arc(0, r * 0.24, r * 0.18, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+    } else if (style === "flat") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.16, r * 0.34); ctx.lineTo(r * 0.16, r * 0.34); ctx.stroke();
+    } else { // smile
+      ctx.beginPath(); ctx.arc(0, r * 0.16, r * 0.34, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
     }
   }
 
@@ -853,5 +942,25 @@
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
   }
 
-  window.RENDER = { draw };
+  // Standalone brawler portrait for the title-screen picker: the same glossy
+  // neon sphere (SPR.charBody) plus a calm arena-style face, centered at (0,0)
+  // with radius r. opts: { pupilX, pupilY } in [-1,1] (eye direction), blink.
+  function portrait(ctx, color, r, opts) {
+    opts = opts || {};
+    ctx.save();
+    ctx.save();
+    ctx.scale(1, 0.95);                 // gentle squash, echoing the arena look
+    const body = SPR.charBody(color);
+    const d = r * 1.16;
+    ctx.drawImage(body, -d, -d, d * 2, d * 2);
+    ctx.restore();
+    // Same personalized face as in the arena, calm mood, eyes following cursor.
+    paintFace(ctx, color && color.face, r, {
+      pupilX: opts.pupilX || 0, pupilY: opts.pupilY || 0,
+      blink: !!opts.blink, mood: "calm", now: performance.now(),
+    });
+    ctx.restore();
+  }
+
+  window.RENDER = { draw, portrait };
 })();
